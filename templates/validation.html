@@ -1,0 +1,9 @@
+<form hx-post="/todo">
+   <p>Only `foo` accepted</p>
+    <input _="on htmx:validation:validate
+                 if my.value === 'foo'
+                    call me.setCustomValidity('')
+                 else
+                    call me.setCustomValidity('Only foo accepted')"
+           name="todo">
+</form>

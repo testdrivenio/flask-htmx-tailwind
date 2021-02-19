@@ -1,0 +1,7 @@
+<div id="todos">
+    {% for todo in todos %}
+        <div>
+            {{loop.index}} {{todo.title}}
+        </div>
+    {% endfor %}
+</div>

@@ -1,0 +1,19 @@
+{% extends'base.html' %}
+
+{% block content %}
+    <h1>AJAX examples</h1>
+    {% include 'ajax.html' %}
+    <form hx-post="/todo" hx-target="#todos">
+        <input type="text" name="todo">
+        <input type="submit" value="Add Todo">
+    </form>
+    <hr>
+    <h1>Polling example</h1>
+    {% include 'polling.html' %}
+    <hr>
+    <h1>Web Sockets</h1>
+    {% include 'websocket.html' %}
+    <hr>
+    <h1>Validation</h1>
+    {% include 'validation.html' %}
+{% endblock content %}

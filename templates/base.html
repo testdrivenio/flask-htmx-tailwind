@@ -1,15 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://unpkg.com/hyperscript.org@0.0.3"></script>
-    <script src="https://unpkg.com/htmx.org@1.2.0"></script>
-    <title>[Flask + HTMX]</title>
-</head>
-<body style="text-align: center;">
-    {% block content %}
-    {% endblock content %}    
-</body>
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        {% assets 'css' %}
+        <link rel="stylesheet" href="{{ ASSET_URL }}">
+        {% endassets %}
+        <script src="https://unpkg.com/htmx.org@1.2.1"></script>
+        <title>Flask + HTMX + TailwindCSS</title>
+    </head>
+    <body class="bg-blue-100">
+        {% block content %}
+        {% endblock content %}
+    </body>
 </html>

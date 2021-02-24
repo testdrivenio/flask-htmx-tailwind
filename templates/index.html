@@ -1,19 +1,32 @@
-{% extends'base.html' %}
+{% extends 'base.html' %}
 
 {% block content %}
-    <h1>AJAX examples</h1>
-    {% include 'ajax.html' %}
-    <form hx-post="/todo" hx-target="#todos">
-        <input type="text" name="todo">
-        <input type="submit" value="Add Todo">
-    </form>
-    <hr>
-    <h1>Polling example</h1>
-    {% include 'polling.html' %}
-    <hr>
-    <h1>Web Sockets</h1>
-    {% include 'websocket.html' %}
-    <hr>
-    <h1>Validation</h1>
-    {% include 'validation.html' %}
+<div class="w-small w-2/3 mx-auto py-10 text-gray-600">
+
+    <input type="text" name="search" hx-post="/search" hx-trigger="keyup changed delay:250ms"
+        hx-indicator=".htmx-indicator" hx-target="#todo-results" placeholder="Search"
+        class="bg-white h-10 px-5 pr-10 rounded-full text-2xl focus:outline-none">
+    <span class="htmx-indicator">
+        Searching...
+    </span>
+    <button type="submit" class="absolute right-0 top-0 mt-3 mr-4">
+    </button>
+</div>
+<table class="border-collapse w-small w-2/3 mx-auto">
+    <!-- <thead>
+        <tr>
+            <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">
+                #</th>
+            <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">
+                Title</th>
+            <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">
+                Completed</th>
+        </tr>
+    </thead> -->
+
+    {% include 'todo.html' %}
+</table>
+
+
+
 {% endblock content %}

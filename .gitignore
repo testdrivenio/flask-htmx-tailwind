@@ -2,3 +2,4 @@
 node_modules
 static/.webassets-cache
 static/dist
+**/__pycache__

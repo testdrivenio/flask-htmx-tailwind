@@ -1,21 +1,11 @@
-const defaultTheme = require('tailwindcss/defaultTheme')
-
 module.exports = {
-    future: {
-        // removeDeprecatedGapUtilities: true,
-        // purgeLayersByDefault: true,
-    },
-    purge: [],
-    theme: {
-        extend: {
-            fontFamily: {
-                sans: ['Inter var', ...defaultTheme.fontFamily.sans],
-            },
-            tableLayout: ['hover', 'focus'],
-        },
-    },
-    variants: {},
-    plugins: [
-        require('@tailwindcss/ui'),
-    ],
+  purge: [],
+  darkMode: false, // or 'media' or 'class'
+  theme: {
+    extend: {},
+  },
+  variants: {
+    extend: {},
+  },
+  plugins: [],
 }

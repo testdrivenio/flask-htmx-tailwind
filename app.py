@@ -7,6 +7,7 @@ app = Flask(__name__)
 
 css = Bundle("src/main.css", output="dist/main.css", filters="postcss")
 assets = Environment(app)
+assets.config["AUTOPREFIXER_BIN"] = "./node_modules/postcss-cli/bin/postcss"
 assets.register("css", css)
 css.build()
 

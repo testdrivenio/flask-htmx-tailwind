@@ -9,11 +9,9 @@
     <span class="htmx-indicator">
         Searching...
     </span>
-    <button type="submit" class="absolute right-0 top-0 mt-3 mr-4">
-    </button>
 </div>
 <table class="border-collapse w-small w-2/3 mx-auto">
-    <!-- <thead>
+    <thead>
         <tr>
             <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">
                 #</th>
@@ -22,9 +20,10 @@
             <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">
                 Completed</th>
         </tr>
-    </thead> -->
-
-    {% include 'todo.html' %}
+    </thead>
+    <tbody id="todo-results">
+        {% include 'todo.html' %}
+    </tbody>
 </table>
 
 

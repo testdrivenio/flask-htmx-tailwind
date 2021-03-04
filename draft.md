@@ -1,45 +1,29 @@
 # Rapid Prototyping with Flask, HTMX, and Tailwind CSS
 
-In this tutorial, we will learn how to set up Flask, [TailwindCSS](https://tailwindcss.com/) and [HTMX](https://htmx.org/) to build web applications. We'll use Flask for our backend, TailwindCSS for styling our frontend, and HTMX to render the HTML in parts. 
+In this tutorial, you'll learn how to set up Flask with [htmx](https://htmx.org/) and [Tailwind CSS](https://tailwindcss.com/). The goal of both htmx and Tailwind is to simplify modern web development so you can design and enable interactivity without ever leaving the comfort and ease of HTML. We'll also look at how to use [Flask-Assets](https://flask-assets.readthedocs.io/) to bundle and minify static assets in a Flask app.
 
-## What is HTMX?
+## htmx
 
-> htmx allows you to access AJAX, CSS Transitions, WebSockets, and Server-Sent Events directly in HTML, using attributes so that you can build modern user interfaces with the simplicity and power of hypertext - Official documentation
+[htmx](https://htmx.org/) is a library that allows you to access modern browser features like AJAX, CSS Transitions, WebSockets, and Server-Sent Events directly from HTML, rather than using JavaScript. It allows you to build user interfaces quickly with hypertext.
 
-Basically. htmx allows you to perform ajax, CSS transitions, etc., without writing any javascript code. HTMX makes the following possible,
-
-- Any element can make HTTP requests.
-- Event triggers other than `click` and `submit`
-- All HTTP methods are available(GET, POST, PUT, PATCH, DELETE).
-- Replace parts of the document, like a div or any other element, with the output, not the entire screen. 
-- Follow the original web model, i.e., receive HTML response.
-
-Let's see a quick example of how this works!!
+htmx extends a number of features already built into the browser, like making HTTP requests and responding to events. For example, rather than only being able to make GET and POST requests via `a` and `form` elements, you can use HTML attributes to send GET, POST, PUT, PATCH, or DELETE requests on any HTML element:
 
 ```html
-<script src="https://unpkg.com/htmx.org@1.2.1"></script>
-<button hx-get="https://v2.jokeapi.dev/joke/Any?format=txt" hx-target="#output">
-    Click Me
-</button>
-
-<div id="output"></div>
+<button hx-delete="/user/1">Delete</button>
 ```
 
-Paste the above code to an HTML file and run(or use the `quick-example.html` from the repository)
+You can also update parts of a page to create a Single-page Application:
 
-On top, we import the htmx library from CDN. Then we have two elements,
+<p class="codepen" data-height="265" data-theme-id="light" data-default-tab="html,result" data-user="mjhea0" data-slug-hash="RwoJYyx" style="height: 265px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="RwoJYyx">
+  <span>See the Pen <a href="https://codepen.io/mjhea0/pen/RwoJYyx">
+  RwoJYyx</a> by Michael Herman (<a href="https://codepen.io/mjhea0">@mjhea0</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://cpwebassets.codepen.io/assets/embed/ei.js"></script>
 
-- A button with two attributes, `hx-get` and `hx-target`
-- A div with id `output`
+Watch the `network tab`. When the button is clicked, an XHR request is sent to the `https://v2.jokeapi.dev/joke/Any?format=txt&safe-mode` endpoint. The response from the request is then appended to the `p` with an `id` of `output.
 
-The code translates to,
-
-*When the button is clicked, send a GET request to the URL and replace the `#output` element with the response*
-
-![quick-example-demo](images/quick-example.gif)
-
-Watch the `network tab`. When the button is clicked, an XHR(XMLHttpRequest) is sent to the endpoint. 
-
+> For more examples, check out the [UI Examples](https://htmx.org/examples/) page from the official htmx docs.
 
 ### Drawbacks of this model
 
@@ -49,47 +33,54 @@ A couple of drawbacks with this model are,
 - Documentation and example implementation is not enough for reference
 - Size of data transferred
 
-    Think of a todo app implementation in JS and HTMX. We can post the data for the javascript implementation and add a todo to the client-side based on the response status code. When the response is sent, we can have a custom status code(StatusCreated: 201, for example). 
+    Think of a todo app implementation in JS and HTMX. We can post the data for the javascript implementation and add a todo to the client-side based on the response status code. When the response is sent, we can have a custom status code(StatusCreated: 201, for example).
 
-    But in the case of HTMX, we render the todos and sent them back to the client. This can take up some bytes but think of the server's load for a high traffic application. 
+    But in the case of HTMX, we render the todos and sent them back to the client. This can take up some bytes but think of the server's load for a high traffic application.
 
-## Tailwind CSS and Flask-Assets
+TODO: I don't quite understand "But in the case of HTMX, we render the todos and sent them back to the client. This can take up some bytes but think of the server's load for a high traffic application." Can you try to explain in a different way?
 
-> Rapidly build modern websites without ever leaving your HTML.
+## Tailwind CSS
 
-__Tailwind__ is a modern CSS framework that doesn't ship pre-built components. It treats CSS properties as HTML classes to style an element by simply adding/changing the class.
+[Tailwind CSS](https://tailwindcss.com/) is a "utility-first" CSS framework. Rather than shipping pre-build components (like [Bootstrap](https://getbootstrap.com/) or [Bulma](https://bulma.io/)), it provides a number of building blocks (utility classes) that enable one to create layouts and designs easily and quickly.
 
-The highly customizable nature of tailwind makes it a trendy CSS framework.
+TODO: can you add some basic examples and provide some pros and cons as well similar to the htmx section
 
-__Flask-Assets__ helps you to integrate web assets into your Flask application. It takes in a single/multiple CSS/JS files and combines them into a single file and also supports plugins like [cssmin](https://github.com/zacharyvoase/cssmin) and [jsmin](https://github.com/tikitu/jsmin) to minify these files. 
+## Flask-Assets
 
+[Flask-Assets](https://flask-assets.readthedocs.io/) is a extension designed for managing static assets in a Flask application. With it, you create a simple asset pipeline for:
 
-## Setup Flask-Assets
+1. Compiling [Sass](https://sass-lang.com/) and [LESS](http://lesscss.org/) to CSS stylesheets
+1. Combining and minifying multiple CSS and JavaScript files down to a single file for each
+1. Creating asset bundles for use in your templates
 
-Create a virtual environment and install the necessary python packages
+With that, let's look at how to work with each of the above projects in Flask!
 
-```bash
-# setup virtual environment
-virtualenv .venv
-source .venv/bin/activate
+## Project Setup
 
-# install flask and flask-assets
-pip install Flask==1.1.2 Flask-Assets==2.0
-```
-
-Next, let's install Tailwind, PostCSS, Autoprefixer, and PurgeCSS.
+To start, create a new directory for our project, create and activate a new virtual environment, and install Flask along with Flask-Assets:
 
 ```bash
-npm install tailwindcss postcss-cli autoprefixer @fullhuman/postcss-purgecss
+$ mkdir flask-htmx-tailwind && cd flask-htmx-tailwind
+$ python3.9 -m venv venv
+$ source .venv/bin/activate
+(venv)$
+
+(venv)$ pip install Flask==1.1.2 Flask-Assets==2.0
 ```
 
-- Tailwind - Our CSS framwork
-- [PostCSS](https://github.com/postcss/postcss) - A tool for transforming styles with JS plugins
-- [Autoprefixer](https://github.com/postcss/autoprefixer) - A PostCSS plugin that automatically transform CSS to support different browsers
-- [PurgeCSS](https://purgecss.com/) - Remove unused CSS
+Next, let's install Tailwind CSS, [PostCSS]([PostCSS](https://github.com/postcss/postcss)), [Autoprefixer](https://github.com/postcss/autoprefixer), and [PurgeCSS](https://purgecss.com/) with [NPM](https://www.npmjs.com/):
 
+```bash
+$ npm install tailwindcss postcss postcss-cli autoprefixer @fullhuman/postcss-purgecss
+```
 
-Now let's setup flask-assets for tailwind CSS. Add the following to _app.py_
+Additional tools:
+
+- PostCSS - a tool used by Tailwind for preprocessing CSS
+- Autoprefixer - a PostCSS plugin that automatically transforms CSS to support different browsers
+- PurgeCSS - removes unused CSS
+
+Next, add an *app.py* file:
 
 ```python
 # app.py
@@ -99,28 +90,24 @@ from flask_assets import Bundle, Environment
 
 app = Flask(__name__)
 
-css = Bundle("src/main.css", output="dist/main.css", filters="postcss")
 assets = Environment(app)
+css = Bundle("src/main.css", output="dist/main.css", filters="postcss")
+
 assets.register("css", css)
 css.build()
 ```
 
-On the top, we imported the `Bundle` and `Environment` from Flask-Assets. Then we created a Bundle with input as `src/main.css` and output as `dist/main.css` with postcss filter. This actually runs the following command using python subprocess,
+After importing [Bundle](https://flask-assets.readthedocs.io/en/latest/#flask_assets.Bundle) and [Environment](https://flask-assets.readthedocs.io/en/latest/#flask_assets.Environment), we created a new `Environment` and registered our CSS assets to it via a `Bundle`.
+
+The `Bundle` that we created, takes in *src/main.css* as an input, which will then be processed via PostCSS and outputted to *dist/main.css*. Behind the scenes, PostCSS runs like so using a Python subprocess:
 
 ```bash
 postcss src/main.css -o dist/main.css
 ```
 
-PostCSS takes in the `src/main.css` and builds the CSS file to `dist/main.css`.
+> Since all Flask static files reside in the "static" folder by default, the above-mentioned "src" and "dist" folders reside in the "static" folder.
 
-Then we created a new Environment. This registers the specified bundle into the Flask environment to build and include them later using Jinja syntax. 
-
-Finally, the `css.build()` will execute the postcss build command. 
-
-Add the following to the `static/src/main.css`.
-
-> Since all Flask static files reside in `static` by default, the above-mentioned `src/main.css` and `dist/main.css` are in the static folder. 
-
+Add the following to the *static/src/main.css*:
 
 ```css
 /* static/src/main.css */
@@ -130,26 +117,37 @@ Add the following to the `static/src/main.css`.
 @tailwind utilities;
 ```
 
-We are defining all the `base`, `components`, and `utilities` classes of tailwind CSS. PostCSS will build all the classes into the target location.
+Here, we defined all the `base`, `components`, and `utilities` classes from Tailwind CSS. PostCSS will build all the classes into the target location, *dist/main.css*.
 
-Run the program using `python main.py`. You should see a new directory named `dist` inside the static folder. Inspect the `static/dist/main.css` file.
+Run the app:
 
-> In case you get an error saying `postcss not found`, install postcss globally using `npm i -g postcss-cli`
+```sh
+(venv)$ python app.py
+```
 
-Now that you have seen how to setup flask assets let's serve our `index.html` and see the CSS in action. 
+You should see a new directory named "dist" inside the "static" folder.
 
-Complete the `main.py` by adding the following,
+> If you get a `Program file not found: postcss`, try installing PostCSS globally: `npm install --global postcss postcss-cli`.
+
+Take note of the generated *static/dist/main.css* file.
+
+Now that you've seen how to set up Flask-Assets, let's look at how serve up an *index.html* file to see the CSS in action.
+
+## Simple Example
+
+Update the *app.py* file like so:
 
 ```python
-# main.py
+# app.py
 
-from flask import Flask
+from flask import Flask, render_template
 from flask_assets import Bundle, Environment
 
 app = Flask(__name__)
 
-css = Bundle("src/main.css", output="dist/main.css", filters="postcss")
 assets = Environment(app)
+css = Bundle("src/main.css", output="dist/main.css", filters="postcss")
+
 assets.register("css", css)
 css.build()
 
@@ -163,81 +161,88 @@ if __name__ == "__main__":
     app.run(debug=True)
 ```
 
-Add the base template and include the assets that we built.
+Create a "templates" folder. Then, add a *base.html* file to it:
 
 ```html
 <!-- templates/base.html -->
 
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        
-        {% assets 'css' %}
-        <link rel="stylesheet" href="{{ ASSET_URL }}">
-        {% endassets %}
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-        <title>Flask + HTMX + TailwindCSS</title>
-    </head>
-    <body class="bg-blue-100">
-        {% block content %}
-        {% endblock content %}
-    </body>
+    {% assets 'css' %}
+      <link rel="stylesheet" href="{{ ASSET_URL }}">
+    {% endassets %}
+
+    <title>Flask + htmlx + Tailwind CSS</title>
+  </head>
+  <body class="bg-blue-100">
+    {% block content %}
+    {% endblock content %}
+  </body>
 </html>
 ```
 
-Notice the `{% assets 'css' %` block in the above file. Since we registered the CSS Bundle with the app environment, we can access it using the registered name(`css`), and the `{{ ASSET_URL }}` will automatically use the path.
+Take note of the `{% assets 'css' %` block. Since we registered the CSS Bundle with the app environment, we can access it using the registered name, `css`, and the `{{ ASSET_URL }}` will automatically use the path.
 
-Also we added some color to the body using `<body class="bg-blue-100">`. The `bg-blue-100` is our tailwind style to change the background color to the lightest blue shade.
+Also, we added some color to the HTML body via `<body class="bg-blue-100">`. `bg-blue-100` is used to change the [background color](https://tailwindcss.com/docs/background-color) to light blue.
+
+Add the *index.html* file:
 
 
 ```html
 <!-- templates/index.html -->
+
+{% extends "base.html" %}
 
 {% block content %}
 <h1>Hello World</h1>
 {% endblock content %}
 ```
 
-Start the server using `python main.py` and navigate to http://localhost:5000 to see the result. Also, check out the `static/dist/main.css` to see the complete CSS built. _You should see a `Hello World` with blue body background_. 
+Start the server via `python app.py` and navigate to [http://localhost:5000](http://localhost:5000) in your browser to see the results
 
+TODO: the `bg-blue-100` class isn't working. my dist/main.css file looks like this:
 
-## Live Search using Flask, HTML and TailwindCSS
+```
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
 
-Now that we have seen how to set up Flask and TailwindCSS, lets's build a live search that displays results as we type.
+should i see the actual classes?
 
-Include the htmx cdn to the head section of our base template.
+With Tailwind configured, let's add htmx into the mix and build a live search that displays results as you type.
+
+## Live Search Example
+
+TODO: rather than using the CDN, show how to use Flask-Assets by downloading the JS file and creating a new asset bundle
+
+Include htmx via the [UNPKG](https://unpkg.com/) CDN to the head section of the base template:
 
 ```html
-...
-{% endassets %}
-        
-<script src="https://unpkg.com/htmx.org@1.2.1"></script>
-<title>Flask + HTMX + TailwindCSS</title>
-...
-```
+<!-- templates/base.html -->
 
-Navigate to https://jsonplaceholder.typicode.com/todos and save all the todos to a new file, `todo.py`.
+<!DOCTYPE html>
+<html lang="en">
 
-```python
-todos = [
-  {
-    "userId": 1,
-    "id": 1,
-    "title": "delectus aut autem",
-    "completed": false
-  },
-  {
-    "userId": 1,
-    "id": 2,
     ...
+
+    <script src="https://unpkg.com/htmx.org@1.2.1"></script>
+
+    ...
+
+</html>
 ```
 
-We will search based on the title of each todo using the logic,
+Navigate to [https://jsonplaceholder.typicode.com/todos](https://jsonplaceholder.typicode.com/todos) and save all the TODOs to a new file called *todo.py*.
 
-Add the following to the `index.html` file 
+We'll add the ability to search based on the title of each todo.
+
+Add the following to the `index.html` file
 
 ```html
 <!-- templates/index.html -->
@@ -245,104 +250,110 @@ Add the following to the `index.html` file
 
 {% block content %}
 <div class="w-small w-2/3 mx-auto py-10 text-gray-600">
-
-    <input type="text" name="search" hx-post="/search" hx-trigger="keyup changed delay:250ms"
-        hx-indicator=".htmx-indicator" hx-target="#todo-results" placeholder="Search"
-        class="bg-white h-10 px-5 pr-10 rounded-full text-2xl focus:outline-none">
-    <span class="htmx-indicator">
-        Searching...
-    </span>
+  <input
+    type="text"
+    name="search"
+    hx-post="/search"
+    hx-trigger="keyup changed delay:250ms"
+    hx-indicator=".htmx-indicator"
+    hx-target="#todo-results"
+    placeholder="Search"
+    class="bg-white h-10 px-5 pr-10 rounded-full text-2xl focus:outline-none"
+  >
+  <span class="htmx-indicator">Searching...</span>
 </div>
+
 <table class="border-collapse w-small w-2/3 mx-auto">
-    <thead>
-        <tr>
-            <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">
-                #</th>
-            <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">
-                Title</th>
-            <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">
-                Completed</th>
-        </tr>
-    </thead>
-    <tbody id="todo-results">
-        {% include 'todo.html' %}
-    </tbody>
+  <thead>
+    <tr>
+      <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">#</th>
+      <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">Title</th>
+      <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">Completed</th>
+    </tr>
+  </thead>
+  <tbody id="todo-results">
+    {% include 'todo.html' %}
+  </tbody>
 </table>
 {% endblock content %}
 ```
 
-Let's discuss the htmx defined here,
+Let's take a moment to look at the attributes defined from htmx:
 
 ```html
-<input type="text" name="search" hx-post="/search" hx-trigger="keyup changed delay:250ms"
-        hx-indicator=".htmx-indicator" hx-target="#todo-results" placeholder="Search"
-        class="bg-white h-10 px-5 pr-10 rounded-full text-2xl focus:outline-none">
+<input
+  type="text"
+  name="search"
+  hx-post="/search"
+  hx-trigger="keyup changed delay:250ms"
+  hx-indicator=".htmx-indicator"
+  hx-target="#todo-results"
+  placeholder="Search"
+  class="bg-white h-10 px-5 pr-10 rounded-full text-2xl focus:outline-none"
+>
 ```
 
-The input will send a POST request to the `/search` endpoint. The request is triggered _on input with a delay of 250ms, so if a new character is entered within the 250ms, the request is not triggered_. The HTML response from the request is displayed in the `#todo-results` element, and also, we have an indicator, which is a loading element that pops up during the request until the response. 
+1. The input sends a POST request to the `/search` endpoint.
+1. The request is triggered via the keyup event with a delay of 250ms. So if a new keyup event is entered before 250ms elapses between the last keyup, the request is not triggered.
+1. The HTML response from the request is then displayed in the `#todo-results` element.
+1. We also have an indicator, which is a loading element that appears after the request is sent and disappears after the response comes back.
 
-You can see the `.htmx-indicator` just below the input element. 
+Add the *templates/todo.html* file:
 
 ```html
 <!-- templates/todo.html -->
 
 {% if todos|length>0 %}
-{% for todo in todos %}
-<tr
-    class="bg-white lg:hover:bg-gray-100 flex lg:table-row flex-row lg:flex-row flex-wrap lg:flex-no-wrap mb-10 lg:mb-0">
-    <td
-        class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">
-        {{todo.id}}
-    </td>
-    <td
-        class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">
-        {{todo.title}}
-    </td>
-    <td
-        class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">
+  {% for todo in todos %}
+    <tr class="bg-white lg:hover:bg-gray-100 flex lg:table-row flex-row lg:flex-row flex-wrap lg:flex-no-wrap mb-10 lg:mb-0">
+      <td class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">{{todo.id}}</td>
+      <td class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">{{todo.title}}</td>
+      <td class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">
         {% if todo.completed %}
-        <span class="rounded bg-green-400 py-1 px-3 text-xs font-bold">Yes</span>
+          <span class="rounded bg-green-400 py-1 px-3 text-xs font-bold">Yes</span>
         {% else %}
-        <span class="rounded bg-red-400 py-1 px-3 text-xs font-bold">No</span>
+          <span class="rounded bg-red-400 py-1 px-3 text-xs font-bold">No</span>
         {% endif %}
-
-    </td>
-</tr>
-{% endfor %}
+      </td>
+    </tr>
+  {% endfor %}
 {% endif %}
 ```
 
-This file renders the todos that match our search description. Finally, update our app to include the search endpoint.
+This file renders the TODOs that match our search query. Finally, add the route handler to *app.py*:
 
 ```python
-# main.py
-
-...
-@app.route("/")
-def homepage():
-    return render_template("index.html", todos=[])
-
-
 @app.route("/search", methods=["POST"])
 def search_todo():
     search_term = request.form.get("search")
-    if len(search_term) == 0:
+
+    if not len(search_term):
         return render_template("todo.html", todos=[])
+
     res_todos = []
     for todo in todos:
         if search_term in todo["title"]:
             res_todos.append(todo)
+
     return render_template("todo.html", todos=res_todos)
-...
 ```
 
-The `/search` endpoint will search for the todos and render the `todo.html` with all the results. You should now understand why we wrote the todos in a separate HTML file.
+The `/search` endpoint searches for the TODOs and renders the *todo.html* template with all the results.
 
-Run the application using `python main.py` and navigate to http://localhost:5000 to test it out.
+Update the imports at the top:
 
-## Demo
+```python
+from flask import Flask, render_template, request
+from flask_assets import Bundle, Environment
+
+from todo import todos
+```
+
+Run the application using `python app.py` and navigate to [http://localhost:5000](http://localhost:5000) again to test it out
 
 ![final-demo](images/demo.gif)
+
+EDITED TO HERE
 
 ## Finishing up - Removing unwanted CSS
 
@@ -354,9 +365,9 @@ Start by creating a tailwind config file.
 npx tailwind init
 ```
 
-This should generate a `tailwind.config.js` file. All the customizations for tailwind go into this file, but we leave it for now. 
+This should generate a `tailwind.config.js` file. All the customizations for tailwind go into this file, but we leave it for now.
 
-Create a `postcss.config.js` and add the following to it. 
+Create a `postcss.config.js` and add the following to it.
 
 ```js
 const path = require('path');
@@ -404,7 +415,7 @@ In this tutorial, we have seen,
 - Building a live search app using Flask, TailwindCSS, and HTMX
 - Remove unused CSS using purgeCSS
 
-HTMX can render elements without reloading the page. Although this reduces the amount of work done on the client-side, the server amount(data) can be higher than the js-based frameworks. The library is very young, but maybe one-day, htmx can use it for building the frontend. Tailwind is a great CSS framework that offers customizability(we haven't seen much here). The framework does offer a CDN, which consumes ~71.5kB when compressed, which is 6x what we needed to build for this tutorial. Flask-Assets is a powerful tool for bundling static assets. 
+HTMX can render elements without reloading the page. Although this reduces the amount of work done on the client-side, the server amount(data) can be higher than the js-based frameworks. The library is very young, but maybe one-day, htmx can use it for building the frontend. Tailwind is a great CSS framework that offers customizability(we haven't seen much here). The framework does offer a CDN, which consumes ~71.5kB when compressed, which is 6x what we needed to build for this tutorial. Flask-Assets is a powerful tool for bundling static assets.
 
 ### Looking for challenges?
 

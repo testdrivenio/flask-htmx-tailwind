@@ -6,10 +6,14 @@ from todo import todos
 app = Flask(__name__)
 
 css = Bundle("src/main.css", output="dist/main.css", filters="postcss")
+js = Bundle("src/main.js", output="dist/main.js")
+
 assets = Environment(app)
-assets.config["AUTOPREFIXER_BIN"] = "./node_modules/postcss-cli/bin/postcss"
 assets.register("css", css)
+assets.register("js", js)
+
 css.build()
+js.build()
 
 
 @app.route("/")

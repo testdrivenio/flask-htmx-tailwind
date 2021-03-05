@@ -6,7 +6,7 @@ In this tutorial, you'll learn how to set up Flask with [htmx](https://htmx.org/
 
 [htmx](https://htmx.org/) is a library that allows you to access modern browser features like AJAX, CSS Transitions, WebSockets, and Server-Sent Events directly from HTML, rather than using JavaScript. It allows you to build user interfaces quickly with hypertext.
 
-htmx extends a number of features already built into the browser, like making HTTP requests and responding to events. For example, rather than only being able to make GET and POST requests via `a` and `form` elements, you can use HTML attributes to send GET, POST, PUT, PATCH, or DELETE requests on any HTML element:
+htmx extends several features already built into the browser, like making HTTP requests and responding to events. For example, rather than only being able to make GET and POST requests via `a` and `form` elements, you can use HTML attributes to send GET, POST, PUT, PATCH, or DELETE requests on any HTML element:
 
 ```html
 <button hx-delete="/user/1">Delete</button>
@@ -21,7 +21,7 @@ You can also update parts of a page to create a Single-page Application:
 </p>
 <script async src="https://cpwebassets.codepen.io/assets/embed/ei.js"></script>
 
-Watch the `network tab`. When the button is clicked, an XHR request is sent to the `https://v2.jokeapi.dev/joke/Any?format=txt&safe-mode` endpoint. The response from the request is then appended to the `p` with an `id` of `output.
+Watch the `network tab`. When the button is clicked, an XHR request is sent to the `https://v2.jokeapi.dev/joke/Any?format=txt&safe-mode` endpoint. The request's response is then appended to the `p` with an `id` of `output.
 
 > For more examples, check out the [UI Examples](https://htmx.org/examples/) page from the official htmx docs.
 
@@ -33,21 +33,71 @@ A couple of drawbacks with this model are,
 - Documentation and example implementation is not enough for reference
 - Size of data transferred
 
-    Think of a todo app implementation in JS and HTMX. We can post the data for the javascript implementation and add a todo to the client-side based on the response status code. When the response is sent, we can have a custom status code(StatusCreated: 201, for example).
+    SPA frameworks based on javascript works by passing data back and forth between the client and server, usually in JSON format. The data received is then rendered by the client.
 
-    But in the case of HTMX, we render the todos and sent them back to the client. This can take up some bytes but think of the server's load for a high traffic application.
-
-TODO: I don't quite understand "But in the case of HTMX, we render the todos and sent them back to the client. This can take up some bytes but think of the server's load for a high traffic application." Can you try to explain in a different way?
+    However, HTMX receives the rendered HTML from the server, and it replaces the target element with the response. The HTML in rendered format is higher in terms of size than the JSON response. 
 
 ## Tailwind CSS
 
-[Tailwind CSS](https://tailwindcss.com/) is a "utility-first" CSS framework. Rather than shipping pre-build components (like [Bootstrap](https://getbootstrap.com/) or [Bulma](https://bulma.io/)), it provides a number of building blocks (utility classes) that enable one to create layouts and designs easily and quickly.
+[Tailwind CSS](https://tailwindcss.com/) is a "utility-first" CSS framework. Rather than shipping pre-build components (like [Bootstrap](https://getbootstrap.com/) or [Bulma](https://bulma.io/)), it provides many building blocks (utility classes) that enable one to create layouts and designs easily and quickly.
 
-TODO: can you add some basic examples and provide some pros and cons as well similar to the htmx section
+For example,
+
+The following HTML,
+
+```html
+<style>
+.hello {
+  height: 5px;
+  width: 10px;
+  background: gray;
+  border-width: 1px;
+  border-radius: 3px;
+  padding: 5px;
+}
+</style>
+<div class="hello">Hello World</div>
+```
+
+can be implemented in tailwind using,
+
+```html
+<div class="h-1 w-2 bg-gray-600 border rounded-sm p-1">Hello World</div>
+```
+
+Use the [css to tailwind converter](https://tailwind-converter.netlify.app/) to convert css to tailwind and see the difference. 
+
+### Pros and Cons of TailwindCSS
+
+#### Pros
+
+- Highly customizable 
+  
+  TailwindCSS is highly customizable. Although it comes with prebuilt classes, they can be overridden using the `tailwind.config.js` file. 
+
+- Optimization using PurgeCSS
+
+  PurgeCSS can remove all the unused CSS classes from the tailwind CSS file, thus reducing the css bundle's size. 
+
+- Easy dark mode implementation
+
+  It is effortless to implement dark mode using tailwind css. 
+
+  ```html
+  <div class="bg-white dark:bg-black">
+  ```
+
+  The `dark:bg-black` class represents the div in dark mode. 
+
+#### Cons
+
+- Tailwind does not provide any prebuilt components like buttons, cards, etc. Everything has to be created from scratch(or use any community-created components).
+
+- CSS is inline, instead of separate CSS files. 
 
 ## Flask-Assets
 
-[Flask-Assets](https://flask-assets.readthedocs.io/) is a extension designed for managing static assets in a Flask application. With it, you create a simple asset pipeline for:
+[Flask-Assets](https://flask-assets.readthedocs.io/) is an extension designed for managing static assets in a Flask application. With it, you create a simple asset pipeline for:
 
 1. Compiling [Sass](https://sass-lang.com/) and [LESS](http://lesscss.org/) to CSS stylesheets
 1. Combining and minifying multiple CSS and JavaScript files down to a single file for each
@@ -99,13 +149,41 @@ css.build()
 
 After importing [Bundle](https://flask-assets.readthedocs.io/en/latest/#flask_assets.Bundle) and [Environment](https://flask-assets.readthedocs.io/en/latest/#flask_assets.Environment), we created a new `Environment` and registered our CSS assets to it via a `Bundle`.
 
-The `Bundle` that we created, takes in *src/main.css* as an input, which will then be processed via PostCSS and outputted to *dist/main.css*. Behind the scenes, PostCSS runs like so using a Python subprocess:
+The `Bundle` that we created takes in *src/main.css* as an input, which will then be processed via PostCSS and outputted to *dist/main.css*. Behind the scenes, PostCSS runs like so using a Python subprocess:
 
 ```bash
 postcss src/main.css -o dist/main.css
 ```
 
 > Since all Flask static files reside in the "static" folder by default, the above-mentioned "src" and "dist" folders reside in the "static" folder.
+
+
+Now let's setup tailwind and postcss. Start by creating a tailwind config file.
+
+```bash
+npx tailwind init
+```
+
+This should generate a `tailwind.config.js` file. All the customizations for tailwind go into this file, but we leave it for now.
+
+Create a `postcss.config.js` and add the following to it.
+
+```js
+const path = require('path');
+
+module.exports = (ctx) => ({
+    plugins: [
+        require('tailwindcss')(path.resolve(__dirname, 'tailwind.config.js')),
+        require('autoprefixer'),
+        process.env.FLASK_PROD === 'production' && require('@fullhuman/postcss-purgecss')({
+            content: [
+                path.resolve(__dirname, 'templates/**/*.html')
+            ],
+            defaultExtractor: content => content.match(/[A-Za-z0-9-_:/]+/g) || []
+        })
+    ]
+})
+```
 
 Add the following to the *static/src/main.css*:
 
@@ -131,7 +209,7 @@ You should see a new directory named "dist" inside the "static" folder.
 
 Take note of the generated *static/dist/main.css* file.
 
-Now that you've seen how to set up Flask-Assets, let's look at how serve up an *index.html* file to see the CSS in action.
+Now that you've seen how to set up Flask-Assets, let's look at how to serve up an *index.html* file to see the CSS in action.
 
 ## Simple Example
 
@@ -205,23 +283,38 @@ Add the *index.html* file:
 
 Start the server via `python app.py` and navigate to [http://localhost:5000](http://localhost:5000) in your browser to see the results
 
-TODO: the `bg-blue-100` class isn't working. my dist/main.css file looks like this:
-
-```
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-```
-
-should i see the actual classes?
 
 With Tailwind configured, let's add htmx into the mix and build a live search that displays results as you type.
 
 ## Live Search Example
 
-TODO: rather than using the CDN, show how to use Flask-Assets by downloading the JS file and creating a new asset bundle
+In the earlier HTML example, we used CDN to fetch the library. For the next section, we will download the library and bundle it using flask-assets.
 
-Include htmx via the [UNPKG](https://unpkg.com/) CDN to the head section of the base template:
+Download the [HTMX library](https://unpkg.com/htmx.org@1.2.1/dist/htmx.min.js) and save it to `static/src/main.js`. Now create a new bundle for our js file in the `app.py`.
+
+Updated `app.py` should look like,
+
+```python
+# app.py
+...
+css = Bundle("src/main.css", output="dist/main.css", filters="postcss")
+js = Bundle("src/main.js", output="dist/main.js") # new
+
+assets = Environment(app)
+assets.register("css", css)
+assets.register("js", js) # new
+
+css.build()
+js.build() # new
+...
+```
+
+We created a new bundle named js with the `static/src/main.js` file. The bundle outputs to `static/dist/main.js`. Since we are not using any filters here, the source and target files will be the same. 
+
+> You can also not specify the build commands manually, i.e. `css.build() and js.build()`. Then the files will be built when the files are called for the first time(when the base.html renders).
+
+Now we add the new asset to our `base.html` file.
+
 
 ```html
 <!-- templates/base.html -->
@@ -231,7 +324,14 @@ Include htmx via the [UNPKG](https://unpkg.com/) CDN to the head section of the 
 
     ...
 
-    <script src="https://unpkg.com/htmx.org@1.2.1"></script>
+    {% assets 'css' %}
+    <link rel="stylesheet" href="{{ ASSET_URL }}">
+    {% endassets %}
+
+    <!-- new -->
+    {% assets 'js' %}
+    <script type="text/javascript" src="{{ ASSET_URL }}"></script>
+    {% endassets %}
 
     ...
 
@@ -242,7 +342,7 @@ Navigate to [https://jsonplaceholder.typicode.com/todos](https://jsonplaceholder
 
 We'll add the ability to search based on the title of each todo.
 
-Add the following to the `index.html` file
+Add the following to the `index.html` file.
 
 ```html
 <!-- templates/index.html -->
@@ -296,7 +396,7 @@ Let's take a moment to look at the attributes defined from htmx:
 1. The input sends a POST request to the `/search` endpoint.
 1. The request is triggered via the keyup event with a delay of 250ms. So if a new keyup event is entered before 250ms elapses between the last keyup, the request is not triggered.
 1. The HTML response from the request is then displayed in the `#todo-results` element.
-1. We also have an indicator, which is a loading element that appears after the request is sent and disappears after the response comes back.
+1. We also have an indicator, a loading element that appears after the request is sent and disappears after the response comes back.
 
 Add the *templates/todo.html* file:
 
@@ -359,32 +459,7 @@ EDITED TO HERE
 
 The size of our `static/dist/main.css` is roughly 3.8MB. This is because we generated the whole tailwind CSS file. The whole file is not required as we only used some of the classes for styling. To remove unused CSS, we will use the `purgecss` installed earlier.
 
-Start by creating a tailwind config file.
 
-```bash
-npx tailwind init
-```
-
-This should generate a `tailwind.config.js` file. All the customizations for tailwind go into this file, but we leave it for now.
-
-Create a `postcss.config.js` and add the following to it.
-
-```js
-const path = require('path');
-
-module.exports = (ctx) => ({
-    plugins: [
-        require('tailwindcss')(path.resolve(__dirname, 'tailwind.config.js')),
-        require('autoprefixer'),
-        process.env.FLASK_PROD === 'production' && require('@fullhuman/postcss-purgecss')({
-            content: [
-                path.resolve(__dirname, 'templates/**/*.html')
-            ],
-            defaultExtractor: content => content.match(/[A-Za-z0-9-_:/]+/g) || []
-        })
-    ]
-})
-```
 
 It looks for an environment variable named `FLASK_PROD`. If its value is "production", the purgecss will walk through all the HTML files in the templates directory. The final `static/dist/main.css` will only contain the CSS that we use in HTML files.
 

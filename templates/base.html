@@ -9,7 +9,11 @@
         <link rel="stylesheet" href="{{ ASSET_URL }}">
         {% endassets %}
 
-        <script src="https://unpkg.com/htmx.org@1.2.1"></script>
+
+        {% assets 'js' %}
+        <script type="text/javascript" src="{{ ASSET_URL }}"></script>
+        {% endassets %}
+
         <title>Flask + HTMX + TailwindCSS</title>
     </head>
     <body class="bg-blue-100">

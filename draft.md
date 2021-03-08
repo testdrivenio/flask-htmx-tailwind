@@ -31,8 +31,8 @@ Watch the `network tab`. When the button is clicked, an XHR request is sent to t
 
 **Pros**:
 
-1. TODO
-1. TODO
+1. No need to write Javascript.
+1. Frameworks like Django, Ruby on rails can be fully leveraged.
 
 **Cons**:
 
@@ -499,7 +499,7 @@ To test, fist set the environment variable:
 (venv)$ set FLASK_PROD=production # for windows
 ```
 
-The, remove the dist and the cache folders, before starting the app:
+Then, remove the dist and the cache folders, before starting the app:
 
 ```bash
 (venv)$ rm -rf static/.webassets-cache static/dist
@@ -518,11 +518,18 @@ In this tutorial, we looked at how to:
 
 htmx can render elements without reloading the page. Although this reduces the amount of work done on the client-side, the data sent from the sever can be higher since it's sending rendered HTML. The library is still young, but the future looks bright for it.
 
-TODO: might be worth mentioning that websockets + html is starting to look trendy https://alistapart.com/article/the-future-of-web-software-is-html-over-websockets/
+
+Html + websockets is gaining popularity. This approach delivers realtime changes(html) to the webpage using websockets instead of using a javascript framework. The same approach is used by the famous [Phoenix LiveView](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html). Read more about html over websockets in the article "[The Future of Web Software Is HTML-over-WebSockets](https://alistapart.com/article/the-future-of-web-software-is-html-over-websockets/)"    
 
 Tailwind is a powerful CSS framework that focuses on developer productivity. It's highly customizable.
 
-TODO: can you add some resources for customizing
+Here are some resources for tailwind customization
+
+- [TailwindCSS Customization](https://tailwindcss.com/docs/configuration)
+- [The complete guide to customizing a Tailwind CSS theme](https://pinegrow.com/tutorials/customizing-a-tailwind-css-theme/)
+- [Customize the Tailwind Design System](https://egghead.io/lessons/tailwind-customize-the-tailwind-design-system)
+- [A gentle guide to customization in TailwindCSS](https://dev.to/developeraspire/a-gentle-guide-to-customization-in-tailwindcss-9cp)
+
 
 When using Flask, be sure to couple both htmx and Tailwind with Flask-Assets to simplify static asset management.
 

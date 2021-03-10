@@ -1,0 +1,25 @@
+<!-- templates/base.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {% assets 'css' %}
+      <link rel="stylesheet" href="{{ ASSET_URL }}">
+    {% endassets %}
+
+    <!-- new -->
+    {% assets 'js' %}
+      <script type="text/javascript" src="{{ ASSET_URL }}"></script>
+    {% endassets %}
+
+    <title>Flask + htmlx + Tailwind CSS</title>
+  </head>
+  <body class="bg-blue-100">
+    {% block content %}
+    {% endblock content %}
+  </body>
+</html>

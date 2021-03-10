@@ -1,0 +1,32 @@
+<!-- templates/index.html -->
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="w-small w-2/3 mx-auto py-10 text-gray-600">
+  <input
+    type="text"
+    name="search"
+    hx-post="/search"
+    hx-trigger="keyup changed delay:250ms"
+    hx-indicator=".htmx-indicator"
+    hx-target="#todo-results"
+    placeholder="Search"
+    class="bg-white h-10 px-5 pr-10 rounded-full text-2xl focus:outline-none"
+  >
+  <span class="htmx-indicator">Searching...</span>
+</div>
+
+<table class="border-collapse w-small w-2/3 mx-auto">
+  <thead>
+    <tr>
+      <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">#</th>
+      <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">Title</th>
+      <th class="p-3 font-bold uppercase bg-gray-200 text-gray-600 border border-gray-300 hidden lg:table-cell">Completed</th>
+    </tr>
+  </thead>
+  <tbody id="todo-results">
+    {% include 'todo.html' %}
+  </tbody>
+</table>
+{% endblock content %}

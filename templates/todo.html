@@ -1,0 +1,17 @@
+<!-- templates/todo.html -->
+
+{% if todos|length>0 %}
+  {% for todo in todos %}
+    <tr class="bg-white lg:hover:bg-gray-100 flex lg:table-row flex-row lg:flex-row flex-wrap lg:flex-no-wrap mb-10 lg:mb-0">
+      <td class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">{{todo.id}}</td>
+      <td class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">{{todo.title}}</td>
+      <td class="w-full lg:w-auto p-3 text-gray-800 text-center border border-b block lg:table-cell relative lg:static">
+        {% if todo.completed %}
+          <span class="rounded bg-green-400 py-1 px-3 text-xs font-bold">Yes</span>
+        {% else %}
+          <span class="rounded bg-red-400 py-1 px-3 text-xs font-bold">No</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+{% endif %}

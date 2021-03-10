@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__
+node_modules/
+venv/
+static/.webassets-cache/
+static/dist/

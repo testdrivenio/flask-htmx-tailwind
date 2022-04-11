@@ -9,7 +9,7 @@ from todo import todos
 app = Flask(__name__)
 
 assets = Environment(app)
-css = Bundle("src/main.css", output="dist/main.css", filters="postcss")
+css = Bundle("src/main.css", output="dist/main.css")
 js = Bundle("src/*.js", output="dist/main.js") # new
 
 assets.register("css", css)

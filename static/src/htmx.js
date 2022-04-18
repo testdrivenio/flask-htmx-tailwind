@@ -1,7 +1,9 @@
 //AMD insanity
 (function (root, factory) {
+    //@ts-ignore
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as an anonymous module.
+        //@ts-ignore
         define([], factory);
     } else {
         // Browser globals
@@ -12,6 +14,8 @@ return (function () {
         'use strict';
 
         // Public API
+        //** @type {import("./htmx").HtmxApi} */
+        // TODO: list all methods in public API
         var htmx = {
             onLoad: onLoadHelper,
             process: processNode,
@@ -22,6 +26,10 @@ return (function () {
             find : find,
             findAll : findAll,
             closest : closest,
+            values : function(elt, type){
+                var inputValues = getInputValues(elt, type || "post");
+                return inputValues.values;
+            },
             remove : removeElement,
             addClass : addClassToElement,
             removeClass : removeClassFromElement,
@@ -37,14 +45,23 @@ return (function () {
                 refreshOnHistoryMiss:false,
                 defaultSwapStyle:'innerHTML',
                 defaultSwapDelay:0,
-                defaultSettleDelay:100,
+                defaultSettleDelay:20,
                 includeIndicatorStyles:true,
                 indicatorClass:'htmx-indicator',
                 requestClass:'htmx-request',
+                addedClass:'htmx-added',
                 settlingClass:'htmx-settling',
                 swappingClass:'htmx-swapping',
                 allowEval:true,
-                attributesToSettle:["class", "style", "width", "height"]
+                inlineScriptNonce:'',
+                attributesToSettle:["class", "style", "width", "height"],
+                withCredentials:false,
+                timeout:0,
+                wsReconnectDelay: 'full-jitter',
+                disableSelector: "[hx-disable], [data-hx-disable]",
+                useTemplateFragments: false,
+                scrollBehavior: 'smooth',
+                defaultFocusScroll: false,
             },
             parseInterval:parseInterval,
             _:internalEval,
@@ -53,8 +70,35 @@ return (function () {
             },
             createWebSocket: function(url){
                 return new WebSocket(url, []);
-            }
+            },
+            version: "1.7.0"
         };
+
+        /** @type {import("./htmx").HtmxInternalApi} */
+        var internalAPI = {
+            bodyContains: bodyContains,
+            filterValues: filterValues,
+            hasAttribute: hasAttribute,
+            getAttributeValue: getAttributeValue,
+            getClosestMatch: getClosestMatch,
+            getExpressionVars: getExpressionVars,
+            getHeaders: getHeaders,
+            getInputValues: getInputValues,
+            getInternalData: getInternalData,
+            getSwapSpecification: getSwapSpecification,
+            getTriggerSpecs: getTriggerSpecs,
+            getTarget: getTarget,
+            makeFragment: makeFragment,
+            mergeObjects: mergeObjects,
+            makeSettleInfo: makeSettleInfo,
+            oobSwap: oobSwap,
+            selectAndSwap: selectAndSwap,
+            settleImmediately: settleImmediately,
+            shouldCancel: shouldCancel,
+            triggerEvent: triggerEvent,
+            triggerErrorEvent: triggerErrorEvent,
+            withExtensions: withExtensions,
+        }
 
         var VERBS = ['get', 'post', 'put', 'delete', 'patch'];
         var VERB_SELECTOR = VERBS.map(function(verb){
@@ -65,19 +109,24 @@ return (function () {
         // Utilities
         //====================================================================
 
-		function parseInterval(str) {
-			if (str == undefined)  {
-				return undefined
-			}
-			if (str.slice(-2) == "ms") {
-				return parseFloat(str.slice(0,-2)) || undefined
-			}
-			if (str.slice(-1) == "s") {
-				return (parseFloat(str.slice(0,-1)) * 1000) || undefined
-			}
-			return parseFloat(str) || undefined
+        function parseInterval(str) {
+            if (str == undefined)  {
+                return undefined
+            }
+            if (str.slice(-2) == "ms") {
+                return parseFloat(str.slice(0,-2)) || undefined
+            }
+            if (str.slice(-1) == "s") {
+                return (parseFloat(str.slice(0,-1)) * 1000) || undefined
+            }
+            return parseFloat(str) || undefined
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @param {string} name
+         * @returns {(string | null)}
+         */
         function getRawAttribute(elt, name) {
             return elt.getAttribute && elt.getAttribute(name);
         }
@@ -88,18 +137,36 @@ return (function () {
                 elt.hasAttribute("data-" + qualifiedName));
         }
 
+        /**
+         *
+         * @param {HTMLElement} elt
+         * @param {string} qualifiedName
+         * @returns {(string | null)}
+         */
         function getAttributeValue(elt, qualifiedName) {
             return getRawAttribute(elt, qualifiedName) || getRawAttribute(elt, "data-" + qualifiedName);
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @returns {HTMLElement | null}
+         */
         function parentElt(elt) {
             return elt.parentElement;
         }
 
+        /**
+         * @returns {Document}
+         */
         function getDocument() {
             return document;
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @param {(e:HTMLElement) => boolean} condition
+         * @returns {HTMLElement | null}
+         */
         function getClosestMatch(elt, condition) {
             if (condition(elt)) {
                 return elt;
@@ -110,22 +177,47 @@ return (function () {
             }
         }
 
+        function getAttributeValueWithDisinheritance(initialElement, ancestor, attributeName){
+            var attributeValue = getAttributeValue(ancestor, attributeName);
+            var disinherit = getAttributeValue(ancestor, "hx-disinherit");
+            if (initialElement !== ancestor && disinherit && (disinherit === "*" || disinherit.split(" ").indexOf(attributeName) >= 0)) {
+                return "unset";
+            } else {
+                return attributeValue
+            }
+        }
+
+        /**
+         * @param {HTMLElement} elt
+         * @param {string} attributeName
+         * @returns {string | null}
+         */
         function getClosestAttributeValue(elt, attributeName) {
             var closestAttr = null;
             getClosestMatch(elt, function (e) {
-                return closestAttr = getAttributeValue(e, attributeName);
+                return closestAttr = getAttributeValueWithDisinheritance(elt, e, attributeName);
             });
-            return closestAttr;
+            if (closestAttr !== "unset") {
+                return closestAttr;
+            }
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @param {string} selector
+         * @returns {boolean}
+         */
         function matches(elt, selector) {
+            // @ts-ignore: non-standard properties for browser compatability
             // noinspection JSUnresolvedVariable
-            var matchesFunction = elt.matches ||
-                elt.matchesSelector || elt.msMatchesSelector || elt.mozMatchesSelector
-                || elt.webkitMatchesSelector || elt.oMatchesSelector;
+            var matchesFunction = elt.matches || elt.matchesSelector || elt.msMatchesSelector || elt.mozMatchesSelector || elt.webkitMatchesSelector || elt.oMatchesSelector;
             return matchesFunction && matchesFunction.call(elt, selector);
         }
 
+        /**
+         * @param {string} str
+         * @returns {string}
+         */
         function getStartTag(str) {
             var tagMatcher = /<([a-z][^\/\0>\x20\t\r\n\f]*)/i
             var match = tagMatcher.exec( str );
@@ -136,55 +228,104 @@ return (function () {
             }
         }
 
+        /**
+         *
+         * @param {string} resp
+         * @param {number} depth
+         * @returns {Element}
+         */
         function parseHTML(resp, depth) {
             var parser = new DOMParser();
             var responseDoc = parser.parseFromString(resp, "text/html");
+
+            /** @type {Element} */
             var responseNode = responseDoc.body;
             while (depth > 0) {
                 depth--;
+                // @ts-ignore
                 responseNode = responseNode.firstChild;
             }
             if (responseNode == null) {
+                // @ts-ignore
                 responseNode = getDocument().createDocumentFragment();
             }
             return responseNode;
         }
 
+        /**
+         *
+         * @param {string} resp
+         * @returns {Element}
+         */
         function makeFragment(resp) {
-            var startTag = getStartTag(resp);
-            switch (startTag) {
-                case "thead":
-                case "tbody":
-                case "tfoot":
-                case "colgroup":
-                case "caption":
-                    return parseHTML("<table>" + resp + "</table>", 1);
-                case "col":
-                    return parseHTML("<table><colgroup>" + resp + "</colgroup></table>", 2);
-                case "tr":
-                    return parseHTML("<table><tbody>" + resp + "</tbody></table>", 2);
-                case "td":
-                case "th":
-                    return parseHTML("<table><tbody><tr>" + resp + "</tr></tbody></table>", 3);
-                case "script":
-                    return parseHTML("<div>" + resp + "</div>", 1);
-                default:
-                    return parseHTML(resp, 0);
+            if (htmx.config.useTemplateFragments) {
+                var documentFragment = parseHTML("<body><template>" + resp + "</template></body>", 0);
+                // @ts-ignore type mismatch between DocumentFragment and Element.
+                // TODO: Are these close enough for htmx to use interchangably?
+                return documentFragment.querySelector('template').content;
+            } else {
+                var startTag = getStartTag(resp);
+                switch (startTag) {
+                    case "thead":
+                    case "tbody":
+                    case "tfoot":
+                    case "colgroup":
+                    case "caption":
+                        return parseHTML("<table>" + resp + "</table>", 1);
+                    case "col":
+                        return parseHTML("<table><colgroup>" + resp + "</colgroup></table>", 2);
+                    case "tr":
+                        return parseHTML("<table><tbody>" + resp + "</tbody></table>", 2);
+                    case "td":
+                    case "th":
+                        return parseHTML("<table><tbody><tr>" + resp + "</tr></tbody></table>", 3);
+                    case "script":
+                        return parseHTML("<div>" + resp + "</div>", 1);
+                    default:
+                        return parseHTML(resp, 0);
+                }
             }
         }
 
+        /**
+         * @param {Function} func
+         */
+        function maybeCall(func){
+            if(func) {
+                func();
+            }
+        }
+
+        /**
+         * @param {any} o
+         * @param {string} type
+         * @returns
+         */
         function isType(o, type) {
             return Object.prototype.toString.call(o) === "[object " + type + "]";
         }
 
+        /**
+         * @param {*} o
+         * @returns {o is Function}
+         */
         function isFunction(o) {
             return isType(o, "Function");
         }
 
+        /**
+         * @param {*} o
+         * @returns {o is Object}
+         */
         function isRawObject(o) {
             return isType(o, "Object");
         }
 
+        /**
+         * getInternalData retrieves "private" data stored by htmx within an element
+         * @param {HTMLElement} elt
+         * @returns {*}
+         */
         function getInternalData(elt) {
             var dataProp = 'htmx-internal-data';
             var data = elt[dataProp];
@@ -194,6 +335,11 @@ return (function () {
             return data;
         }
 
+        /**
+         * toArray converts an ArrayLike object into a real array.
+         * @param {ArrayLike} arr
+         * @returns {any[]}
+         */
         function toArray(arr) {
             var returnArr = [];
             if (arr) {
@@ -219,14 +365,25 @@ return (function () {
             return elemTop < window.innerHeight && elemBottom >= 0;
         }
 
-        function bodyContains(elt) {
-            return getDocument().body.contains(elt);
-        }
+	function bodyContains(elt) {
+	    if (elt.getRootNode() instanceof ShadowRoot) {
+		return getDocument().body.contains(elt.getRootNode().host);
+	    } else {
+		return getDocument().body.contains(elt);
+	    }
+	}
 
         function splitOnWhitespace(trigger) {
             return trigger.trim().split(/\s+/);
         }
 
+        /**
+         * mergeObjects takes all of the keys from
+         * obj2 and duplicates them into obj1
+         * @param {Object} obj1
+         * @param {Object} obj2
+         * @returns {Object}
+         */
         function mergeObjects(obj1, obj2) {
             for (var key in obj2) {
                 if (obj2.hasOwnProperty(key)) {
@@ -300,7 +457,7 @@ return (function () {
             if (delay) {
                 setTimeout(function(){addClassToElement(elt, clazz);}, delay)
             } else {
-                elt.classList.add(clazz);
+                elt.classList && elt.classList.add(clazz);
             }
         }
 
@@ -309,7 +466,13 @@ return (function () {
             if (delay) {
                 setTimeout(function(){removeClassFromElement(elt, clazz);}, delay)
             } else {
-                elt.classList.remove(clazz);
+                if (elt.classList) {
+                    elt.classList.remove(clazz);
+                    // if there are no classes left, remove the class attribute
+                    if (elt.classList.length === 0) {
+                        elt.removeAttribute("class");
+                    }
+                }
             }
         }
 
@@ -341,17 +504,25 @@ return (function () {
         }
 
         function querySelectorAllExt(elt, selector) {
-		    if (selector.indexOf("closest ") === 0) {
+            if (selector.indexOf("closest ") === 0) {
                 return [closest(elt, selector.substr(8))];
             } else if (selector.indexOf("find ") === 0) {
                 return [find(elt, selector.substr(5))];
+            } else if (selector === 'document') {
+                return [document];
+            } else if (selector === 'window') {
+                return [window];
             } else {
                 return getDocument().querySelectorAll(selector);
             }
         }
 
         function querySelectorExt(eltOrSelector, selector) {
-            return querySelectorAllExt(eltOrSelector, selector)[0]
+            if (selector) {
+                return querySelectorAllExt(eltOrSelector, selector)[0];
+            } else {
+                return querySelectorAllExt(getDocument().body, eltOrSelector)[0];
+            }
         }
 
         function resolveTarget(arg2) {
@@ -399,13 +570,36 @@ return (function () {
         //====================================================================
         // Node processing
         //====================================================================
+        
+        var DUMMY_ELT = getDocument().createElement("output"); // dummy element for bad selectors
+        function findAttributeTargets(elt, attrName) {
+            var attrTarget = getClosestAttributeValue(elt, attrName);
+            if (attrTarget) {
+                if (attrTarget === "this") {
+                    return [findThisElement(elt, attrName)];
+                } else {
+                    var result = querySelectorAllExt(elt, attrTarget);
+                    if (result.length === 0) {
+                        logError('The selector "' + attrTarget + '" on ' + attrName + " returned no matches!");
+                        return [DUMMY_ELT]
+                    } else {
+                        return result;
+                    }
+                }
+            }
+        }
+
+        function findThisElement(elt, attribute){
+            return getClosestMatch(elt, function (elt) {
+                return getAttributeValue(elt, attribute) != null;
+            })
+        }
 
         function getTarget(elt) {
-            var explicitTarget = getClosestMatch(elt, function(e){return getAttributeValue(e,"hx-target") !== null});
-            if (explicitTarget) {
-                var targetStr = getAttributeValue(explicitTarget, "hx-target");
+            var targetStr = getClosestAttributeValue(elt, "hx-target");
+            if (targetStr) {
                 if (targetStr === "this") {
-                    return explicitTarget;
+                    return findThisElement(elt,'hx-target');
                 } else {
                     return querySelectorExt(elt, targetStr)
                 }
@@ -457,6 +651,13 @@ return (function () {
             return swapStyle === "outerHTML";
         }
 
+        /**
+         *
+         * @param {string} oobValue
+         * @param {HTMLElement} oobElement
+         * @param {*} settleInfo
+         * @returns
+         */
         function oobSwap(oobValue, oobElement, settleInfo) {
             var selector = "#" + oobElement.id;
             var swapStyle = "outerHTML";
@@ -469,18 +670,35 @@ return (function () {
                 swapStyle = oobValue;
             }
 
-            var target = getDocument().querySelector(selector);
-            if (target) {
-                var fragment;
-                fragment = getDocument().createDocumentFragment();
-                fragment.appendChild(oobElement); // pulls the child out of the existing fragment
-                if (!isInlineSwap(swapStyle, target)) {
-                    fragment = oobElement; // if this is not an inline swap, we use the content of the node, not the node itself
-                }
-                swap(swapStyle, target, target, fragment, settleInfo);
+            var targets = getDocument().querySelectorAll(selector);
+            if (targets) {
+                forEach(
+                    targets,
+                    function (target) {
+                        var fragment;
+                        var oobElementClone = oobElement.cloneNode(true);
+                        fragment = getDocument().createDocumentFragment();
+                        fragment.appendChild(oobElementClone);
+                        if (!isInlineSwap(swapStyle, target)) {
+                            fragment = oobElementClone; // if this is not an inline swap, we use the content of the node, not the node itself
+                        }
+
+                        var beforeSwapDetails = {shouldSwap: true, target: target, fragment:fragment };
+                        if (!triggerEvent(target, 'htmx:oobBeforeSwap', beforeSwapDetails)) return;
+
+                        target = beforeSwapDetails.target; // allow re-targeting
+                        if (beforeSwapDetails['shouldSwap']){
+                            swap(swapStyle, target, target, fragment, settleInfo);
+                        }
+                        forEach(settleInfo.elts, function (elt) {
+                            triggerEvent(elt, 'htmx:oobAfterSwap', beforeSwapDetails);
+                        });
+                    }
+                );
+                oobElement.parentNode.removeChild(oobElement);
             } else {
                 oobElement.parentNode.removeChild(oobElement);
-                triggerErrorEvent(getDocument().body, "htmx:oobErrorNoTarget", {content: oobElement})
+                triggerErrorEvent(getDocument().body, "htmx:oobErrorNoTarget", {content: oobElement});
             }
             return oobValue;
         }
@@ -521,6 +739,7 @@ return (function () {
 
         function makeAjaxLoadTask(child) {
             return function () {
+                removeClassFromElement(child, htmx.config.addedClass);
                 processNode(child);
                 processScripts(child);
                 processFocus(child)
@@ -540,6 +759,7 @@ return (function () {
             handleAttributes(parentNode, fragment, settleInfo);
             while(fragment.childNodes.length > 0){
                 var child = fragment.firstChild;
+                addClassToElement(child, htmx.config.addedClass);
                 parentNode.insertBefore(child, insertBefore);
                 if (child.nodeType !== Node.TEXT_NODE && child.nodeType !== Node.COMMENT_NODE) {
                     settleInfo.tasks.push(makeAjaxLoadTask(child));
@@ -555,6 +775,9 @@ return (function () {
             if (internalData.sseEventSource) {
                 internalData.sseEventSource.close();
             }
+
+            triggerEvent(element, "htmx:beforeCleanupElement")
+
             if (internalData.listenerInfos) {
                 forEach(internalData.listenerInfos, function(info) {
                     if (element !== info.on) {
@@ -569,14 +792,16 @@ return (function () {
 
         function swapOuterHTML(target, fragment, settleInfo) {
             if (target.tagName === "BODY") {
-                return swapInnerHTML(target, fragment);
+                return swapInnerHTML(target, fragment, settleInfo);
             } else {
+                // @type {HTMLElement}
+                var newElt
                 var eltBeforeNewContent = target.previousSibling;
                 insertNodesBefore(parentElt(target), target, fragment, settleInfo);
                 if (eltBeforeNewContent == null) {
-                    var newElt = parentElt(target).firstChild;
+                    newElt = parentElt(target).firstChild;
                 } else {
-                    var newElt = eltBeforeNewContent.nextSibling;
+                    newElt = eltBeforeNewContent.nextSibling;
                 }
                 getInternalData(target).replacedWith = newElt; // tuck away so we can fire events on it later
                 settleInfo.elts = [] // clear existing elements
@@ -605,6 +830,10 @@ return (function () {
 
         function swapAfterEnd(target, fragment, settleInfo) {
             return insertNodesBefore(parentElt(target), target.nextSibling, fragment, settleInfo);
+        }
+        function swapDelete(target, fragment, settleInfo) {
+            cleanUpElement(target);
+            return parentElt(target).removeChild(target);
         }
 
         function swapInnerHTML(target, fragment, settleInfo) {
@@ -651,6 +880,9 @@ return (function () {
                 case "afterend":
                     swapAfterEnd(target, fragment, settleInfo);
                     return;
+                case "delete":
+                    swapDelete(target, fragment, settleInfo);
+                    return;
                 default:
                     var extensions = getExtensions(elt);
                     for (var i = 0; i < extensions.length; i++) {
@@ -673,33 +905,32 @@ return (function () {
                             logError(e);
                         }
                     }
-                    swapInnerHTML(target, fragment, settleInfo);
+                    if (swapStyle === "innerHTML") {
+                        swapInnerHTML(target, fragment, settleInfo);
+                    } else {
+                        swap(htmx.config.defaultSwapStyle, elt, target, fragment, settleInfo);
+                    }
             }
         }
 
-        var TITLE_FINDER = /<title>([\s\S]+?)<\/title>/im;
         function findTitle(content) {
-            var result = TITLE_FINDER.exec(content);
-            if (result) {
-                return result[1];
+            if (content.indexOf('<title') > -1) {
+                var contentWithSvgsRemoved = content.replace(/<svg(\s[^>]*>|>)([\s\S]*?)<\/svg>/gim, '');
+                var result = contentWithSvgsRemoved.match(/<title(\s[^>]*>|>)([\s\S]*?)<\/title>/im);
+
+                if (result) {
+                    return result[2];
+                }
             }
         }
 
         function selectAndSwap(swapStyle, target, elt, responseText, settleInfo) {
-            var title = findTitle(responseText);
-            if(title) {
-                var titleElt = find("title");
-                if(titleElt) {
-                    titleElt.innerHTML = title;
-                } else {
-                    window.document.title = title;
-                }
-            }
+            settleInfo.title = findTitle(responseText);
             var fragment = makeFragment(responseText);
             if (fragment) {
                 handleOutOfBandSwaps(fragment, settleInfo);
-                handlePreservedElements(fragment);
                 fragment = maybeSelectFromResponse(elt, fragment);
+                handlePreservedElements(fragment);
                 return swap(swapStyle, elt, target, fragment, settleInfo);
             }
         }
@@ -817,6 +1048,11 @@ return (function () {
         }
 
         var INPUT_SELECTOR = 'input, textarea, select';
+
+        /**
+         * @param {HTMLElement} elt
+         * @returns {import("./htmx").HtmxTriggerSpecification[]}
+         */
         function getTriggerSpecs(elt) {
             var explicitTrigger = getAttributeValue(elt, 'hx-trigger');
             var triggerSpecs = [];
@@ -830,7 +1066,12 @@ return (function () {
                         if (trigger === "every") {
                             var every = {trigger: 'every'};
                             consumeUntil(tokens, NOT_WHITESPACE);
-                            every.pollInterval = parseInterval(consumeUntil(tokens, WHITESPACE));
+                            every.pollInterval = parseInterval(consumeUntil(tokens, /[,\[\s]/));
+                            consumeUntil(tokens, NOT_WHITESPACE);
+                            var eventFilter = maybeGenerateConditional(elt, tokens, "event");
+                            if (eventFilter) {
+                                every.eventFilter = eventFilter;
+                            }
                             triggerSpecs.push(every);
                         } else if (trigger.indexOf("sse:") === 0) {
                             triggerSpecs.push({trigger: 'sse', sseEvent: trigger.substr(4)});
@@ -847,15 +1088,36 @@ return (function () {
                                     triggerSpec.changed = true;
                                 } else if (token === "once") {
                                     triggerSpec.once = true;
+                                } else if (token === "consume") {
+                                    triggerSpec.consume = true;
                                 } else if (token === "delay" && tokens[0] === ":") {
                                     tokens.shift();
                                     triggerSpec.delay = parseInterval(consumeUntil(tokens, WHITESPACE_OR_COMMA));
                                 } else if (token === "from" && tokens[0] === ":") {
                                     tokens.shift();
-                                    triggerSpec.from = consumeUntil(tokens, WHITESPACE_OR_COMMA);
+                                    var from_arg = consumeUntil(tokens, WHITESPACE_OR_COMMA);
+                                    if (from_arg === "closest" || from_arg === "find") {
+                                        tokens.shift();
+                                        from_arg +=
+                                            " " +
+                                            consumeUntil(
+                                                tokens,
+                                                WHITESPACE_OR_COMMA
+                                            );
+                                    }
+                                    triggerSpec.from = from_arg;
+                                } else if (token === "target" && tokens[0] === ":") {
+                                    tokens.shift();
+                                    triggerSpec.target = consumeUntil(tokens, WHITESPACE_OR_COMMA);
                                 } else if (token === "throttle" && tokens[0] === ":") {
                                     tokens.shift();
                                     triggerSpec.throttle = parseInterval(consumeUntil(tokens, WHITESPACE_OR_COMMA));
+                                } else if (token === "queue" && tokens[0] === ":") {
+                                    tokens.shift();
+                                    triggerSpec.queue = consumeUntil(tokens, WHITESPACE_OR_COMMA);
+                                } else if ((token === "root" || token === "threshold") && tokens[0] === ":") {
+                                    tokens.shift();
+                                    triggerSpec[token] = consumeUntil(tokens, WHITESPACE_OR_COMMA);
                                 } else {
                                     triggerErrorEvent(elt, "htmx:syntax:error", {token:tokens.shift()});
                                 }
@@ -885,14 +1147,16 @@ return (function () {
             getInternalData(elt).cancelled = true;
         }
 
-        function processPolling(elt, verb, path, interval) {
+        function processPolling(elt, verb, path, spec) {
             var nodeData = getInternalData(elt);
             nodeData.timeout = setTimeout(function () {
                 if (bodyContains(elt) && nodeData.cancelled !== true) {
-                    issueAjaxRequest(verb, path, elt);
-                    processPolling(elt, verb, getAttributeValue(elt, "hx-" + verb), interval);
+                    if (!maybeFilterEvent(spec, makeEvent('hx:poll:trigger', {triggerSpec:spec, target:elt}))) {
+                        issueAjaxRequest(verb, path, elt);
+                    }
+                    processPolling(elt, verb, getAttributeValue(elt, "hx-" + verb), spec);
                 }
-            }, interval);
+            }, spec.pollInterval);
         }
 
         function isLocalLink(elt) {
@@ -902,15 +1166,19 @@ return (function () {
         }
 
         function boostElement(elt, nodeData, triggerSpecs) {
-            if ((elt.tagName === "A" && isLocalLink(elt)) || elt.tagName === "FORM") {
+            if ((elt.tagName === "A" && isLocalLink(elt) && elt.target === "") || elt.tagName === "FORM") {
                 nodeData.boosted = true;
                 var verb, path;
                 if (elt.tagName === "A") {
                     verb = "get";
                     path = getRawAttribute(elt, 'href');
+                    nodeData.pushURL = true;
                 } else {
                     var rawAttribute = getRawAttribute(elt, "method");
                     verb = rawAttribute ? rawAttribute.toLowerCase() : "get";
+                    if (verb === "get") {
+                        nodeData.pushURL = true;
+                    }
                     path = getRawAttribute(elt, 'action');
                 }
                 triggerSpecs.forEach(function(triggerSpec) {
@@ -919,14 +1187,30 @@ return (function () {
             }
         }
 
-        function shouldCancel(elt) {
-            return elt.tagName === "FORM" ||
-                (matches(elt, 'input[type="submit"], button') && closest(elt, 'form') !== null) ||
-                (elt.tagName === "A" && elt.href && elt.href.indexOf('#') !== 0);
+        /**
+         *
+         * @param {Event} evt
+         * @param {HTMLElement} elt
+         * @returns
+         */
+        function shouldCancel(evt, elt) {
+            if (evt.type === "submit" || evt.type === "click") {
+                if (elt.tagName === "FORM") {
+                    return true;
+                }
+                if (matches(elt, 'input[type="submit"], button') && closest(elt, 'form') !== null) {
+                    return true;
+                }
+                if (elt.tagName === "A" && elt.href &&
+                    (elt.getAttribute('href') === '#' || elt.getAttribute('href').indexOf("#") !== 0)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         function ignoreBoostedAnchorCtrlClick(elt, evt) {
-            return getInternalData(elt).boosted && elt.tagName === "A" && evt.type === "click" && evt.ctrlKey;
+            return getInternalData(elt).boosted && elt.tagName === "A" && evt.type === "click" && (evt.ctrlKey || evt.metaKey);
         }
 
         function maybeFilterEvent(triggerSpec, evt) {
@@ -943,72 +1227,90 @@ return (function () {
         }
 
         function addEventListener(elt, verb, path, nodeData, triggerSpec, explicitCancel) {
-            var eltToListenOn = elt;
+            var eltsToListenOn;
             if (triggerSpec.from) {
-                eltToListenOn = find(triggerSpec.from);
+                eltsToListenOn = querySelectorAllExt(elt, triggerSpec.from);
+            } else {
+                eltsToListenOn = [elt];
             }
-            var eventListener = function (evt) {
-                if (!bodyContains(elt)) {
-                    eltToListenOn.removeEventListener(triggerSpec.trigger, eventListener);
-                    return;
-                }
-                if (ignoreBoostedAnchorCtrlClick(elt, evt)) {
-                    return;
-                }
-                if(explicitCancel || shouldCancel(elt)){
-                    evt.preventDefault();
-                }
-                if (maybeFilterEvent(triggerSpec, evt)) {
-                    return;
-                }
-                var eventData = getInternalData(evt);
-                var elementData = getInternalData(elt);
-                if (!eventData.handled) {
-                    eventData.handled = true;
-                    if (triggerSpec.once) {
-                        if (elementData.triggeredOnce) {
-                            return;
-                        } else {
-                            elementData.triggeredOnce = true;
-                        }
-                    }
-                    if (triggerSpec.changed) {
-                        if (elementData.lastValue === elt.value) {
-                            return;
-                        } else {
-                            elementData.lastValue = elt.value;
-                        }
-                    }
-                    if (elementData.delayed) {
-                        clearTimeout(elementData.delayed);
-                    }
-                    if (elementData.throttle) {
+            forEach(eltsToListenOn, function (eltToListenOn) {
+                var eventListener = function (evt) {
+                    if (!bodyContains(elt)) {
+                        eltToListenOn.removeEventListener(triggerSpec.trigger, eventListener);
                         return;
                     }
-
-                    if (triggerSpec.throttle) {
-                        elementData.throttle = setTimeout(function(){
-                            issueAjaxRequest(verb, path, elt, evt);
-                            elementData.throttle = null;
-                        }, triggerSpec.throttle);
-                    } else if (triggerSpec.delay) {
-                        elementData.delayed = setTimeout(function(){
-                            issueAjaxRequest(verb, path, elt, evt);
-                        }, triggerSpec.delay);
-                    } else {
-                        issueAjaxRequest(verb, path, elt, evt);
+                    if (ignoreBoostedAnchorCtrlClick(elt, evt)) {
+                        return;
                     }
+                    if (explicitCancel || shouldCancel(evt, elt)) {
+                        evt.preventDefault();
+                    }
+                    if (maybeFilterEvent(triggerSpec, evt)) {
+                        return;
+                    }
+                    var eventData = getInternalData(evt);
+                    eventData.triggerSpec = triggerSpec;
+                    if (eventData.handledFor == null) {
+                        eventData.handledFor = [];
+                    }
+                    var elementData = getInternalData(elt);
+                    if (eventData.handledFor.indexOf(elt) < 0) {
+                        eventData.handledFor.push(elt);
+                        if (triggerSpec.consume) {
+                            evt.stopPropagation();
+                        }
+                        if (triggerSpec.target && evt.target) {
+                            if (!matches(evt.target, triggerSpec.target)) {
+                                return;
+                            }
+                        }
+                        if (triggerSpec.once) {
+                            if (elementData.triggeredOnce) {
+                                return;
+                            } else {
+                                elementData.triggeredOnce = true;
+                            }
+                        }
+                        if (triggerSpec.changed) {
+                            if (elementData.lastValue === elt.value) {
+                                return;
+                            } else {
+                                elementData.lastValue = elt.value;
+                            }
+                        }
+                        if (elementData.delayed) {
+                            clearTimeout(elementData.delayed);
+                        }
+                        if (elementData.throttle) {
+                            return;
+                        }
+
+                        if (triggerSpec.throttle) {
+                            if (!elementData.throttle) {
+                                issueAjaxRequest(verb, path, elt, evt);
+                                elementData.throttle = setTimeout(function () {
+                                    elementData.throttle = null;
+                                }, triggerSpec.throttle);
+                            }
+                        } else if (triggerSpec.delay) {
+                            elementData.delayed = setTimeout(function () {
+                                issueAjaxRequest(verb, path, elt, evt);
+                            }, triggerSpec.delay);
+                        } else {
+                            issueAjaxRequest(verb, path, elt, evt);
+                        }
+                    }
+                };
+                if (nodeData.listenerInfos == null) {
+                    nodeData.listenerInfos = [];
                 }
-            };
-            if (nodeData.listenerInfos == null) {
-                nodeData.listenerInfos = [];
-            }
-            nodeData.listenerInfos.push({
-                trigger: triggerSpec.trigger,
-                listener: eventListener,
-                on: eltToListenOn
+                nodeData.listenerInfos.push({
+                    trigger: triggerSpec.trigger,
+                    listener: eventListener,
+                    on: eltToListenOn
+                })
+                eltToListenOn.addEventListener(triggerSpec.trigger, eventListener);
             })
-            eltToListenOn.addEventListener(triggerSpec.trigger, eventListener);
         }
 
         var windowIsScrolling = false // used by initScrollHandler
@@ -1031,19 +1333,31 @@ return (function () {
         }
 
         function maybeReveal(elt) {
-            var nodeData = getInternalData(elt);
-            if (!nodeData.revealed && isScrolledIntoView(elt)) {
-                nodeData.revealed = true;
-                issueAjaxRequest(nodeData.verb, nodeData.path, elt);
+            if (!hasAttribute(elt,'data-hx-revealed') && isScrolledIntoView(elt)) {
+                elt.setAttribute('data-hx-revealed', 'true');
+                var nodeData = getInternalData(elt);
+                if (nodeData.initialized) {
+                    issueAjaxRequest(nodeData.verb, nodeData.path, elt);
+                } else {
+                    // if the node isn't initialized, wait for it before triggering the request
+                    elt.addEventListener("htmx:afterProcessNode",
+                        function () {
+                            issueAjaxRequest(nodeData.verb, nodeData.path, elt);
+                        }, {once: true});
+                }
             }
         }
+
+        //====================================================================
+        // Web Sockets
+        //====================================================================
 
         function processWebSocketInfo(elt, nodeData, info) {
             var values = splitOnWhitespace(info);
             for (var i = 0; i < values.length; i++) {
                 var value = values[i].split(/:(.+)/);
                 if (value[0] === "connect") {
-                    processWebSocketSource(elt, value[1]);
+                    ensureWebSocket(elt, value[1], 0);
                 }
                 if (value[0] === "send") {
                     processWebSocketSend(elt);
@@ -1051,15 +1365,37 @@ return (function () {
             }
         }
 
-        function processWebSocketSource(elt, wssSource) {
-            if (wssSource.indexOf("ws:") !== 0 && wssSource.indexOf("wss:") !== 0) {
-                wssSource = "wss:" + wssSource;
+        function ensureWebSocket(elt, wssSource, retryCount) {
+            if (!bodyContains(elt)) {
+                return;  // stop ensuring websocket connection when socket bearing element ceases to exist
+            }
+
+            if (wssSource.indexOf("/") == 0) {  // complete absolute paths only
+                var base_part = location.hostname + (location.port ? ':'+location.port: '');
+                if (location.protocol == 'https:') {
+                    wssSource = "wss://" + base_part + wssSource;
+                } else if (location.protocol == 'http:') {
+                    wssSource = "ws://" + base_part + wssSource;
+                }
             }
             var socket = htmx.createWebSocket(wssSource);
             socket.onerror = function (e) {
                 triggerErrorEvent(elt, "htmx:wsError", {error:e, socket:socket});
                 maybeCloseWebSocketSource(elt);
             };
+
+            socket.onclose = function (e) {
+                if ([1006, 1012, 1013].indexOf(e.code) >= 0) {  // Abnormal Closure/Service Restart/Try Again Later
+                    var delay = getWebSocketReconnectDelay(retryCount);
+                    setTimeout(function() {
+                        ensureWebSocket(elt, wssSource, retryCount+1);  // creates a websocket with a new timeout
+                    }, delay);
+                }
+            };
+            socket.onopen = function (e) {
+                retryCount = 0;
+            }
+
             getInternalData(elt).webSocket = socket;
             socket.addEventListener('message', function (event) {
                 if (maybeCloseWebSocketSource(elt)) {
@@ -1095,8 +1431,8 @@ return (function () {
                 return getInternalData(parent).webSocket != null;
             });
             if (webSocketSourceElt) {
-                var webSocket = getInternalData(webSocketSourceElt).webSocket;
                 elt.addEventListener(getTriggerSpecs(elt)[0].trigger, function (evt) {
+                    var webSocket = getInternalData(webSocketSourceElt).webSocket;
                     var headers = getHeaders(elt, webSocketSourceElt);
                     var results = getInputValues(elt, 'post');
                     var errors = results.errors;
@@ -1110,13 +1446,27 @@ return (function () {
                         return;
                     }
                     webSocket.send(JSON.stringify(filteredParameters));
-                    if(shouldCancel(elt)){
+                    if(shouldCancel(evt, elt)){
                         evt.preventDefault();
                     }
                 });
             } else {
                 triggerErrorEvent(elt, "htmx:noWebSocketSourceError");
             }
+        }
+
+        function getWebSocketReconnectDelay(retryCount) {
+            var delay = htmx.config.wsReconnectDelay;
+            if (typeof delay === 'function') {
+                // @ts-ignore
+                return delay(retryCount);
+            }
+            if (delay === 'full-jitter') {
+                var exp = Math.min(retryCount, 6);
+                var maxDelay = 1000 * Math.pow(2, exp);
+                return maxDelay * Math.random();
+            }
+            logError('htmx.config.wsReconnectDelay must either be a function or the string "full-jitter"');
         }
 
         //====================================================================
@@ -1169,6 +1519,7 @@ return (function () {
                     var settleInfo = makeSettleInfo(elt);
 
                     selectAndSwap(swapSpec.swapStyle, elt, target, response, settleInfo)
+                    settleImmediately(settleInfo.tasks)
                     triggerEvent(elt, "htmx:sseMessage", event)
                 };
 
@@ -1240,11 +1591,30 @@ return (function () {
                         } else if (triggerSpec.trigger === "revealed") {
                             initScrollHandler();
                             maybeReveal(elt);
+                        } else if (triggerSpec.trigger === "intersect") {
+                            var observerOptions = {};
+                            if (triggerSpec.root) {
+                                observerOptions.root = querySelectorExt(elt, triggerSpec.root)
+                            }
+                            if (triggerSpec.threshold) {
+                                observerOptions.threshold = parseFloat(triggerSpec.threshold);
+                            }
+                            var observer = new IntersectionObserver(function (entries) {
+                                for (var i = 0; i < entries.length; i++) {
+                                    var entry = entries[i];
+                                    if (entry.isIntersecting) {
+                                        triggerEvent(elt, "intersect");
+                                        break;
+                                    }
+                                }
+                            }, observerOptions);
+                            observer.observe(elt);
+                            addEventListener(elt, verb, path, nodeData, triggerSpec);
                         } else if (triggerSpec.trigger === "load") {
                             loadImmediately(elt, verb, path, nodeData, triggerSpec.delay);
                         } else if (triggerSpec.pollInterval) {
                             nodeData.polling = true;
-                            processPolling(elt, verb, path, triggerSpec.pollInterval);
+                            processPolling(elt, verb, path, triggerSpec);
                         } else {
                             addEventListener(elt, verb, path, nodeData, triggerSpec);
                         }
@@ -1255,13 +1625,24 @@ return (function () {
         }
 
         function evalScript(script) {
-            if (script.type === "text/javascript" || script.type === "") {
+            if (script.type === "text/javascript" || script.type === "module" || script.type === "") {
+                var newScript = getDocument().createElement("script");
+                forEach(script.attributes, function (attr) {
+                    newScript.setAttribute(attr.name, attr.value);
+                });
+                newScript.textContent = script.textContent;
+                newScript.async = false;
+                if (htmx.config.inlineScriptNonce) {
+                    newScript.nonce = htmx.config.inlineScriptNonce;
+                }
+                var parent = script.parentElement;
+
                 try {
-                    maybeEval(script, function () {
-                        Function(script.innerText)()
-                    });
+                    parent.insertBefore(newScript, script);
                 } catch (e) {
                     logError(e);
+                } finally {
+                    parent.removeChild(script);
                 }
             }
         }
@@ -1275,22 +1656,45 @@ return (function () {
             });
         }
 
-        function isBoosted() {
+        function hasChanceOfBeingBoosted() {
             return document.querySelector("[hx-boost], [data-hx-boost]");
         }
 
         function findElementsToProcess(elt) {
             if (elt.querySelectorAll) {
-                var boostedElts = isBoosted() ? ", a, form" : "";
+                var boostedElts = hasChanceOfBeingBoosted() ? ", a, form" : "";
                 var results = elt.querySelectorAll(VERB_SELECTOR + boostedElts + ", [hx-sse], [data-hx-sse], [hx-ws]," +
-                    " [data-hx-ws]");
+                    " [data-hx-ws], [hx-ext], [hx-data-ext]");
                 return results;
             } else {
                 return [];
             }
         }
 
+        function initButtonTracking(form){
+            var maybeSetLastButtonClicked = function(evt){
+                if (matches(evt.target, "button, input[type='submit']")) {
+                    var internalData = getInternalData(form);
+                    internalData.lastButtonClicked = evt.target;
+                }
+            };
+
+            // need to handle both click and focus in:
+            //   focusin - in case someone tabs in to a button and hits the space bar
+            //   click - on OSX buttons do not focus on click see https://bugs.webkit.org/show_bug.cgi?id=13724
+
+            form.addEventListener('click', maybeSetLastButtonClicked)
+            form.addEventListener('focusin', maybeSetLastButtonClicked)
+            form.addEventListener('focusout', function(evt){
+                var internalData = getInternalData(form);
+                internalData.lastButtonClicked = null;
+            })
+        }
+
         function initNode(elt) {
+            if (elt.closest && elt.closest(htmx.config.disableSelector)) {
+                return;
+            }
             var nodeData = getInternalData(elt);
             if (!nodeData.initialized) {
                 nodeData.initialized = true;
@@ -1305,6 +1709,10 @@ return (function () {
 
                 if (!explicitAction && getClosestAttributeValue(elt, "hx-boost") === "true") {
                     boostElement(elt, nodeData, triggerSpecs);
+                }
+
+                if (elt.tagName === "FORM") {
+                    initButtonTracking(elt);
                 }
 
                 var sseInfo = getAttributeValue(elt, 'hx-sse');
@@ -1353,6 +1761,15 @@ return (function () {
             return eventName === "htmx:afterProcessNode"
         }
 
+        /**
+         * `withExtensions` locates all active extensions for a provided element, then
+         * executes the provided function using each of the active extensions.  It should
+         * be called internally at every extendable execution point in htmx.
+         *
+         * @param {HTMLElement} elt
+         * @param {(extension:import("./htmx").HtmxExtension) => void} toDo
+         * @returns void
+         */
         function withExtensions(elt, toDo) {
             forEach(getExtensions(elt), function(extension){
                 try {
@@ -1400,7 +1817,7 @@ return (function () {
         //====================================================================
         // History Support
         //====================================================================
-        var currentPathForHistory = null;
+        var currentPathForHistory = location.pathname+location.search;
 
         function getHistoryElement() {
             var historyElt = getDocument().querySelector('[hx-history-elt],[data-hx-history-elt]');
@@ -1422,7 +1839,7 @@ return (function () {
             while(historyCache.length > 0){
                 try {
                     localStorage.setItem("htmx-history-cache", JSON.stringify(historyCache));
-                    return;
+                    break;
                 } catch (e) {
                     triggerErrorEvent(getDocument().body, "htmx:historyCacheError", {cause:e, cache: historyCache})
                     historyCache.shift(); // shrink the cache and retry
@@ -1449,7 +1866,7 @@ return (function () {
             return clone.innerHTML;
         }
 
-        function saveHistory() {
+        function saveCurrentPageToHistory() {
             var elt = getHistoryElement();
             var path = currentPathForHistory || location.pathname+location.search;
             triggerEvent(getDocument().body, "htmx:beforeHistorySave", {path:path, historyElt:elt});
@@ -1478,12 +1895,15 @@ return (function () {
                 if (this.status >= 200 && this.status < 400) {
                     triggerEvent(getDocument().body, "htmx:historyCacheMissLoad", details);
                     var fragment = makeFragment(this.response);
+                    // @ts-ignore
                     fragment = fragment.querySelector('[hx-history-elt],[data-hx-history-elt]') || fragment;
                     var historyElement = getHistoryElement();
                     var settleInfo = makeSettleInfo(historyElement);
+                    // @ts-ignore
                     swapInnerHTML(historyElement, fragment, settleInfo)
                     settleImmediately(settleInfo.tasks);
                     currentPathForHistory = path;
+                    triggerEvent(getDocument().body, "htmx:historyRestore", {path:path});
                 } else {
                     triggerErrorEvent(getDocument().body, "htmx:historyCacheMissLoadError", details);
                 }
@@ -1492,9 +1912,8 @@ return (function () {
         }
 
         function restoreHistory(path) {
-            saveHistory();
+            saveCurrentPageToHistory();
             path = path || location.pathname+location.search;
-            triggerEvent(getDocument().body, "htmx:historyRestore", {path:path});
             var cached = getCachedHistory(path);
             if (cached) {
                 var fragment = makeFragment(cached.content);
@@ -1505,8 +1924,11 @@ return (function () {
                 document.title = cached.title;
                 window.scrollTo(0, cached.scroll);
                 currentPathForHistory = path;
+                triggerEvent(getDocument().body, "htmx:historyRestore", {path:path});
             } else {
                 if (htmx.config.refreshOnHistoryMiss) {
+
+                    // @ts-ignore: optional parameter in reload() function throws error
                     window.location.reload(true);
                 } else {
                     loadHistoryFromServer(path);
@@ -1517,7 +1939,7 @@ return (function () {
         function shouldPush(elt) {
             var pushUrl = getClosestAttributeValue(elt, "hx-push-url");
             return (pushUrl && pushUrl !== "false") ||
-                (elt.tagName === "A" && getInternalData(elt).boosted);
+                (getInternalData(elt).boosted && getInternalData(elt).pushURL);
         }
 
         function getPushUrl(elt) {
@@ -1526,22 +1948,19 @@ return (function () {
         }
 
         function addRequestIndicatorClasses(elt) {
-            mutateRequestIndicatorClasses(elt, "add");
-        }
-
-        function removeRequestIndicatorClasses(elt) {
-            mutateRequestIndicatorClasses(elt, "remove");
-        }
-
-        function mutateRequestIndicatorClasses(elt, action) {
-            var indicator = getClosestAttributeValue(elt, 'hx-indicator');
-            if (indicator) {
-                var indicators = querySelectorAllExt(elt, indicator);
-            } else {
+            var indicators = findAttributeTargets(elt, 'hx-indicator');
+            if (indicators == null) {
                 indicators = [elt];
             }
-            forEach(indicators, function(ic) {
-                ic.classList[action].call(ic.classList, htmx.config.requestClass);
+            forEach(indicators, function (ic) {
+                ic.classList["add"].call(ic.classList, htmx.config.requestClass);
+            });
+            return indicators;
+        }
+
+        function removeRequestIndicatorClasses(indicators) {
+            forEach(indicators, function (ic) {
+                ic.classList["remove"].call(ic.classList, htmx.config.requestClass);
             });
         }
 
@@ -1633,14 +2052,22 @@ return (function () {
             }
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @param {string} verb
+         */
         function getInputValues(elt, verb) {
             var processed = [];
             var values = {};
             var formValues = {};
             var errors = [];
+            var internalData = getInternalData(elt);
 
-            // only validate when form is directly submitted and novalidate is not set
+            // only validate when form is directly submitted and novalidate or formnovalidate are not set
             var validate = matches(elt, 'form') && elt.noValidate !== true;
+            if (internalData.lastButtonClicked) {
+                validate = validate && internalData.lastButtonClicked.formNoValidate !== true;
+            }
 
             // for a non-GET include the closest form
             if (verb !== 'get') {
@@ -1650,20 +2077,25 @@ return (function () {
             // include the element itself
             processInputValue(processed, values, errors, elt, validate);
 
-            // include any explicit includes
-            var includes = getClosestAttributeValue(elt, "hx-include");
-            if (includes) {
-                var nodes = querySelectorAllExt(elt, includes);
-                forEach(nodes, function(node) {
-                    processInputValue(processed, values, errors, node, validate);
-                    // if a non-form is included, include any input values within it
-                    if (!matches(node, 'form')) {
-                        forEach(node.querySelectorAll(INPUT_SELECTOR), function (descendant) {
-                            processInputValue(processed, values, errors, descendant, validate);
-                        })
-                    }
-                });
+            // if a button or submit was clicked last, include its value
+            if (internalData.lastButtonClicked) {
+                var name = getRawAttribute(internalData.lastButtonClicked,"name");
+                if (name) {
+                    values[name] = internalData.lastButtonClicked.value;
+                }
             }
+
+            // include any explicit includes
+            var includes = findAttributeTargets(elt, "hx-include");
+            forEach(includes, function(node) {
+                processInputValue(processed, values, errors, node, validate);
+                // if a non-form is included, include any input values within it
+                if (!matches(node, 'form')) {
+                    forEach(node.querySelectorAll(INPUT_SELECTOR), function (descendant) {
+                        processInputValue(processed, values, errors, descendant, validate);
+                    })
+                }
+            });
 
             // form values take precedence, overriding the regular values
             values = mergeObjects(values, formValues);
@@ -1675,7 +2107,11 @@ return (function () {
             if (returnStr !== "") {
                 returnStr += "&";
             }
-            returnStr += encodeURIComponent(name) + "=" + encodeURIComponent(realValue);
+            if (String(realValue) === "[object Object]") {
+                realValue = JSON.stringify(realValue);
+            }
+            var s = encodeURIComponent(realValue);
+            returnStr += encodeURIComponent(name) + "=" + s;
             return returnStr;
         }
 
@@ -1717,6 +2153,12 @@ return (function () {
         // Ajax
         //====================================================================
 
+        /**
+         * @param {HTMLElement} elt
+         * @param {HTMLElement} target
+         * @param {string} prompt
+         * @returns {Object} // TODO: Define/Improve HtmxHeaderSpecification
+         */
         function getHeaders(elt, target, prompt) {
             var headers = {
                 "HX-Request" : "true",
@@ -1729,9 +2171,20 @@ return (function () {
             if (prompt !== undefined) {
                 headers["HX-Prompt"] = prompt;
             }
+            if (getInternalData(elt).boosted) {
+                headers["HX-Boosted"] = "true";
+            }
             return headers;
         }
 
+        /**
+         * filterValues takes an object containing form input values
+         * and returns a new object that only contains keys that are
+         * specified by the closest "hx-params" attribute
+         * @param {Object} inputValues
+         * @param {HTMLElement} elt
+         * @returns {Object}
+         */
         function filterValues(inputValues, elt) {
             var paramsValue = getClosestAttributeValue(elt, "hx-params");
             if (paramsValue) {
@@ -1758,12 +2211,25 @@ return (function () {
             }
         }
 
-        function getSwapSpecification(elt) {
-            var swapInfo = getClosestAttributeValue(elt, "hx-swap");
+        function isAnchorLink(elt) {
+          return getRawAttribute(elt, 'href') && getRawAttribute(elt, 'href').indexOf("#") >=0
+        }
+
+        /**
+         *
+         * @param {HTMLElement} elt
+         * @param {string} swapInfoOverride
+         * @returns {import("./htmx").HtmxSwapSpecification}
+         */
+        function getSwapSpecification(elt, swapInfoOverride) {
+            var swapInfo = swapInfoOverride ? swapInfoOverride : getClosestAttributeValue(elt, "hx-swap");
             var swapSpec = {
                 "swapStyle" : getInternalData(elt).boosted ? 'innerHTML' : htmx.config.defaultSwapStyle,
                 "swapDelay" : htmx.config.defaultSwapDelay,
                 "settleDelay" : htmx.config.defaultSettleDelay
+            }
+            if (getInternalData(elt).boosted && !isAnchorLink(elt)) {
+              swapSpec["show"] = "top"
             }
             if (swapInfo) {
                 var split = splitOnWhitespace(swapInfo);
@@ -1778,10 +2244,24 @@ return (function () {
                             swapSpec["settleDelay"] = parseInterval(modifier.substr(7));
                         }
                         if (modifier.indexOf("scroll:") === 0) {
-                            swapSpec["scroll"] = modifier.substr(7);
+                            var scrollSpec = modifier.substr(7);
+                            var splitSpec = scrollSpec.split(":");
+                            var scrollVal = splitSpec.pop();
+                            var selectorVal = splitSpec.length > 0 ? splitSpec.join(":") : null;
+                            swapSpec["scroll"] = scrollVal;
+                            swapSpec["scrollTarget"] = selectorVal;
                         }
                         if (modifier.indexOf("show:") === 0) {
-                            swapSpec["show"] = modifier.substr(5);
+                            var showSpec = modifier.substr(5);
+                            var splitSpec = showSpec.split(":");
+                            var showVal = splitSpec.pop();
+                            var selectorVal = splitSpec.length > 0 ? splitSpec.join(":") : null;
+                            swapSpec["show"] = showVal;
+                            swapSpec["showTarget"] = selectorVal;
+                        }
+                        if (modifier.indexOf("focus-scroll:") === 0) {
+                            var focusScrollVal = modifier.substr("focus-scroll:".length);
+                            swapSpec["focusScroll"] = focusScrollVal == "true";
                         }
                     }
                 }
@@ -1799,7 +2279,8 @@ return (function () {
             if (encodedParameters != null) {
                 return encodedParameters;
             } else {
-                if (getClosestAttributeValue(elt, "hx-encoding") === "multipart/form-data") {
+                if (getClosestAttributeValue(elt, "hx-encoding") === "multipart/form-data" ||
+                    (matches(elt, "form") && getRawAttribute(elt, 'enctype') === "multipart/form-data")) {
                     return makeFormData(filteredParameters);
                 } else {
                     return urlEncode(filteredParameters);
@@ -1807,6 +2288,11 @@ return (function () {
             }
         }
 
+        /**
+         *
+         * @param {Element} target
+         * @returns {import("./htmx").HtmxSettleInfo}
+         */
         function makeSettleInfo(target) {
             return {tasks: [], elts: [target]};
         }
@@ -1815,23 +2301,46 @@ return (function () {
             var first = content[0];
             var last = content[content.length - 1];
             if (swapSpec.scroll) {
-                if (swapSpec.scroll === "top" && first) {
-                    first.scrollTop = 0;
+                var target = null;
+                if (swapSpec.scrollTarget) {
+                    target = querySelectorExt(first, swapSpec.scrollTarget);
                 }
-                if (swapSpec.scroll === "bottom" && last) {
-                    last.scrollTop = last.scrollHeight;
+                if (swapSpec.scroll === "top" && (first || target)) {
+                    target = target || first;
+                    target.scrollTop = 0;
+                }
+                if (swapSpec.scroll === "bottom" && (last || target)) {
+                    target = target || last;
+                    target.scrollTop = target.scrollHeight;
                 }
             }
             if (swapSpec.show) {
-                if (swapSpec.show === "top" && first) {
-                    first.scrollIntoView(true);
+                var target = null;
+                if (swapSpec.showTarget) {
+                    var targetStr = swapSpec.showTarget;
+                    if (swapSpec.showTarget === "window") {
+                        targetStr = "body";
+                    }
+                    target = querySelectorExt(first, targetStr);
                 }
-                if (swapSpec.show === "bottom" && last) {
-                    last.scrollIntoView(false);
+                if (swapSpec.show === "top" && (first || target)) {
+                    target = target || first;
+                    target.scrollIntoView({block:'start', behavior: htmx.config.scrollBehavior});
+                }
+                if (swapSpec.show === "bottom" && (last || target)) {
+                    target = target || last;
+                    target.scrollIntoView({block:'end', behavior: htmx.config.scrollBehavior});
                 }
             }
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @param {string} attr
+         * @param {boolean=} evalAsDefault
+         * @param {Object=} values
+         * @returns {Object}
+         */
         function getValuesForElement(elt, attr, evalAsDefault, values) {
             if (values == null) {
                 values = {};
@@ -1845,6 +2354,9 @@ return (function () {
                 var evaluateValue = evalAsDefault;
                 if (str.indexOf("javascript:") === 0) {
                     str = str.substr(11);
+                    evaluateValue = true;
+                } else if (str.indexOf("js:") === 0) {
+                    str = str.substr(3);
                     evaluateValue = true;
                 }
                 if (str.indexOf('{') !== 0) {
@@ -1876,14 +2388,28 @@ return (function () {
             }
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @param {*} expressionVars
+         * @returns
+         */
         function getHXVarsForElement(elt, expressionVars) {
             return getValuesForElement(elt, "hx-vars", true, expressionVars);
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @param {*} expressionVars
+         * @returns
+         */
         function getHXValsForElement(elt, expressionVars) {
             return getValuesForElement(elt, "hx-vals", false, expressionVars);
         }
 
+        /**
+         * @param {HTMLElement} elt
+         * @returns {Object}
+         */
         function getExpressionVars(elt) {
             return mergeObjects(getHXVarsForElement(elt), getHXValsForElement(elt));
         }
@@ -1917,46 +2443,141 @@ return (function () {
         }
 
         function ajaxHelper(verb, path, context) {
+            verb = verb.toLowerCase();
             if (context) {
                 if (context instanceof Element || isType(context, 'String')) {
-                    issueAjaxRequest(verb, path, null, null, null, resolveTarget(context));
+                    return issueAjaxRequest(verb, path, null, null, {
+                        targetOverride: resolveTarget(context),
+                        returnPromise: true
+                    });
                 } else {
-                    issueAjaxRequest(verb, path, resolveTarget(context.source), context.event, context.handler, resolveTarget(context.target));
+                    return issueAjaxRequest(verb, path, resolveTarget(context.source), context.event,
+                        {
+                            handler : context.handler,
+                            headers : context.headers,
+                            values : context.values,
+                            targetOverride: resolveTarget(context.target),
+                            swapOverride: context.swap,
+                            returnPromise: true
+                        });
                 }
             } else {
-                issueAjaxRequest(verb, path);
+                return issueAjaxRequest(verb, path, null, null, {
+                        returnPromise: true
+                });
             }
         }
 
-        function issueAjaxRequest(verb, path, elt, event, responseHandler, targetOverride) {
+        function hierarchyForElt(elt) {
+            var arr = [];
+            while (elt) {
+                arr.push(elt);
+                elt = elt.parentElement;
+            }
+            return arr;
+        }
+
+        function issueAjaxRequest(verb, path, elt, event, etc) {
+            var resolve = null;
+            var reject = null;
+            etc = etc != null ? etc : {};
+            if(etc.returnPromise && typeof Promise !== "undefined"){
+                var promise = new Promise(function (_resolve, _reject) {
+                    resolve = _resolve;
+                    reject = _reject;
+                });
+            }
             if(elt == null) {
                 elt = getDocument().body;
             }
-            if (responseHandler == null) {
-                responseHandler = handleAjaxResponse;
-            }
+            var responseHandler = etc.handler || handleAjaxResponse;
+
             if (!bodyContains(elt)) {
                 return; // do not issue requests for elements removed from the DOM
             }
-            var target = targetOverride || getTarget(elt);
-            if (target == null) {
+            var target = etc.targetOverride || getTarget(elt);
+            if (target == null || target == DUMMY_ELT) {
                 triggerErrorEvent(elt, 'htmx:targetError', {target: getAttributeValue(elt, "hx-target")});
                 return;
             }
+
+            var syncElt = elt;
             var eltData = getInternalData(elt);
-            if (eltData.requestInFlight) {
-                eltData.queuedRequest = function(){
-                    issueAjaxRequest(verb, path, elt, event)
-                };
-                return;
-            } else {
-                eltData.requestInFlight = true;
+            var syncStrategy = getClosestAttributeValue(elt, "hx-sync");
+            var queueStrategy = null;
+            var abortable = false;
+            if (syncStrategy) {
+                var syncStrings = syncStrategy.split(":");
+                var selector = syncStrings[0].trim();
+                if (selector === "this") {
+                    syncElt = findThisElement(elt, 'hx-sync');
+                } else {
+                    syncElt = querySelectorExt(elt, selector);
+                }
+                // default to the drop strategy
+                syncStrategy = (syncStrings[1] || 'drop').trim();
+                eltData = getInternalData(syncElt);
+                if (syncStrategy === "drop" && eltData.xhr && eltData.abortable !== true) {
+                    return;
+                } else if (syncStrategy === "abort") {
+                    if (eltData.xhr) {
+                        return;
+                    } else {
+                        abortable = true;
+                    }
+                } else if (syncStrategy === "replace") {
+                    triggerEvent(syncElt, 'htmx:abort'); // abort the current request and continue
+                } else if (syncStrategy.indexOf("queue") === 0) {
+                    var queueStrArray = syncStrategy.split(" ");
+                    queueStrategy = (queueStrArray[1] || "last").trim();
+                }
             }
+
+            if (eltData.xhr) {
+                if (eltData.abortable) {
+                    triggerEvent(syncElt, 'htmx:abort'); // abort the current request and continue
+                } else {
+                    if(queueStrategy == null){
+                        if (event) {
+                            var eventData = getInternalData(event);
+                            if (eventData && eventData.triggerSpec && eventData.triggerSpec.queue) {
+                                queueStrategy = eventData.triggerSpec.queue;
+                            }
+                        }
+                        if (queueStrategy == null) {
+                            queueStrategy = "last";
+                        }
+                    }
+                    if (eltData.queuedRequests == null) {
+                        eltData.queuedRequests = [];
+                    }
+                    if (queueStrategy === "first" && eltData.queuedRequests.length === 0) {
+                        eltData.queuedRequests.push(function () {
+                            issueAjaxRequest(verb, path, elt, event, etc)
+                        });
+                    } else if (queueStrategy === "all") {
+                        eltData.queuedRequests.push(function () {
+                            issueAjaxRequest(verb, path, elt, event, etc)
+                        });
+                    } else if (queueStrategy === "last") {
+                        eltData.queuedRequests = []; // dump existing queue
+                        eltData.queuedRequests.push(function () {
+                            issueAjaxRequest(verb, path, elt, event, etc)
+                        });
+                    }
+                    return;
+                }
+            }
+
+            var xhr = new XMLHttpRequest();
+            eltData.xhr = xhr;
+            eltData.abortable = abortable;
             var endRequestLock = function(){
-                eltData.requestInFlight = false
-                var queuedRequest = eltData.queuedRequest;
-                eltData.queuedRequest = null;
-                if (queuedRequest) {
+                eltData.xhr = null;
+                eltData.abortable = false;
+                if (eltData.queuedRequests != null &&
+                    eltData.queuedRequests.length > 0) {
+                    var queuedRequest = eltData.queuedRequests.shift();
                     queuedRequest();
                 }
             }
@@ -1965,33 +2586,47 @@ return (function () {
                 var promptResponse = prompt(promptQuestion);
                 // prompt returns null if cancelled and empty string if accepted with no entry
                 if (promptResponse === null ||
-                    !triggerEvent(elt, 'htmx:prompt', {prompt: promptResponse, target:target}))
-                    return endRequestLock();
+                    !triggerEvent(elt, 'htmx:prompt', {prompt: promptResponse, target:target})) {
+                    maybeCall(resolve);
+                    endRequestLock();
+                    return promise;
+                }
             }
 
             var confirmQuestion = getClosestAttributeValue(elt, "hx-confirm");
             if (confirmQuestion) {
-                if(!confirm(confirmQuestion)) return endRequestLock();
+                if(!confirm(confirmQuestion)) {
+                    maybeCall(resolve);
+                    endRequestLock()
+                    return promise;
+                }
             }
 
-            var xhr = new XMLHttpRequest();
 
             var headers = getHeaders(elt, target, promptResponse);
+            if (etc.headers) {
+                headers = mergeObjects(headers, etc.headers);
+            }
             var results = getInputValues(elt, verb);
             var errors = results.errors;
             var rawParameters = results.values;
+            if (etc.values) {
+                rawParameters = mergeObjects(rawParameters, etc.values);
+            }
             var expressionVars = getExpressionVars(elt);
             var allParameters = mergeObjects(rawParameters, expressionVars);
             var filteredParameters = filterValues(allParameters, elt);
 
             if (verb !== 'get' && getClosestAttributeValue(elt, "hx-encoding") == null) {
-                headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+                headers['Content-Type'] = 'application/x-www-form-urlencoded';
             }
 
             // behavior of anchors w/ empty href is to use the current URL
             if (path == null || path === "") {
                 path = getDocument().location.href;
             }
+
+            var requestAttrValues = getValuesForElement(elt, 'hx-request');
 
             var requestConfig = {
                 parameters: filteredParameters,
@@ -2000,11 +2635,18 @@ return (function () {
                 target:target,
                 verb:verb,
                 errors:errors,
+                withCredentials: etc.credentials || requestAttrValues.credentials || htmx.config.withCredentials,
+                timeout:  etc.timeout || requestAttrValues.timeout || htmx.config.timeout,
                 path:path,
                 triggeringEvent:event
             };
 
-            if(!triggerEvent(elt, 'htmx:configRequest', requestConfig)) return endRequestLock();
+            if(!triggerEvent(elt, 'htmx:configRequest', requestConfig)){
+                maybeCall(resolve);
+                endRequestLock();
+                return promise;
+            }
+
             // copy out in case the object was overwritten
             path = requestConfig.path;
             verb = requestConfig.verb;
@@ -2014,7 +2656,9 @@ return (function () {
 
             if(errors && errors.length > 0){
                 triggerEvent(elt, 'htmx:validation:halted', requestConfig)
-                return endRequestLock();
+                maybeCall(resolve);
+                endRequestLock();
+                return promise;
             }
 
             var splitPath = path.split("#");
@@ -2040,45 +2684,82 @@ return (function () {
             }
 
             xhr.overrideMimeType("text/html");
+            xhr.withCredentials = requestConfig.withCredentials;
+            xhr.timeout = requestConfig.timeout;
 
             // request headers
-            for (var header in headers) {
-                if (headers.hasOwnProperty(header)) {
-                    var headerValue = headers[header];
-                    safelySetHeaderValue(xhr, header, headerValue);
+            if (requestAttrValues.noHeaders) {
+                // ignore all headers
+            } else {
+                for (var header in headers) {
+                    if (headers.hasOwnProperty(header)) {
+                        var headerValue = headers[header];
+                        safelySetHeaderValue(xhr, header, headerValue);
+                    }
                 }
             }
 
-            var responseInfo = {xhr: xhr, target: target, requestConfig: requestConfig, pathInfo:{
+            var responseInfo = {xhr: xhr, target: target, requestConfig: requestConfig, etc:etc, pathInfo:{
                   path:path, finalPath:finalPathForGet, anchor:anchor
                 }
             };
+
             xhr.onload = function () {
                 try {
+                    var hierarchy = hierarchyForElt(elt);
                     responseHandler(elt, responseInfo);
+                    removeRequestIndicatorClasses(indicators);
+                    triggerEvent(elt, 'htmx:afterRequest', responseInfo);
+                    triggerEvent(elt, 'htmx:afterOnLoad', responseInfo);
+                    // if the body no longer contains the element, trigger the even on the closest parent
+                    // remaining in the DOM
+                    if (!bodyContains(elt)) {
+                        var secondaryTriggerElt = null;
+                        while (hierarchy.length > 0 && secondaryTriggerElt == null) {
+                            var parentEltInHierarchy = hierarchy.shift();
+                            if (bodyContains(parentEltInHierarchy)) {
+                                secondaryTriggerElt = parentEltInHierarchy;
+                            }
+                        }
+                        if (secondaryTriggerElt) {
+                            triggerEvent(secondaryTriggerElt, 'htmx:afterRequest', responseInfo);
+                            triggerEvent(secondaryTriggerElt, 'htmx:afterOnLoad', responseInfo);
+                        }
+                    }
+                    maybeCall(resolve);
+                    endRequestLock();
                 } catch (e) {
                     triggerErrorEvent(elt, 'htmx:onLoadError', mergeObjects({error:e}, responseInfo));
                     throw e;
-                } finally {
-                    removeRequestIndicatorClasses(elt);
-                    var finalElt = getInternalData(elt).replacedWith || elt;
-                    triggerEvent(finalElt, 'htmx:afterRequest', responseInfo);
-                    triggerEvent(finalElt, 'htmx:afterOnLoad', responseInfo);
-                    endRequestLock();
                 }
             }
             xhr.onerror = function () {
-                removeRequestIndicatorClasses(elt);
+                removeRequestIndicatorClasses(indicators);
                 triggerErrorEvent(elt, 'htmx:afterRequest', responseInfo);
                 triggerErrorEvent(elt, 'htmx:sendError', responseInfo);
+                maybeCall(reject);
                 endRequestLock();
             }
             xhr.onabort = function() {
-                removeRequestIndicatorClasses(elt);
+                removeRequestIndicatorClasses(indicators);
+                triggerErrorEvent(elt, 'htmx:afterRequest', responseInfo);
+                triggerErrorEvent(elt, 'htmx:sendAbort', responseInfo);
+                maybeCall(reject);
                 endRequestLock();
             }
-            if(!triggerEvent(elt, 'htmx:beforeRequest', responseInfo)) return endRequestLock();
-            addRequestIndicatorClasses(elt);
+            xhr.ontimeout = function() {
+                removeRequestIndicatorClasses(indicators);
+                triggerErrorEvent(elt, 'htmx:afterRequest', responseInfo);
+                triggerErrorEvent(elt, 'htmx:timeout', responseInfo);
+                maybeCall(reject);
+                endRequestLock();
+            }
+            if(!triggerEvent(elt, 'htmx:beforeRequest', responseInfo)){
+                maybeCall(resolve);
+                endRequestLock()
+                return promise
+            }
+            var indicators = addRequestIndicatorClasses(elt);
 
             forEach(['loadstart', 'loadend', 'progress', 'abort'], function(eventName) {
                 forEach([xhr, xhr.upload], function (target) {
@@ -2091,12 +2772,15 @@ return (function () {
                     })
                 });
             });
+            triggerEvent(elt, 'htmx:beforeSend', responseInfo);
             xhr.send(verb === 'get' ? null : encodeParamsForBody(xhr, elt, filteredParameters));
+            return promise;
         }
 
         function handleAjaxResponse(elt, responseInfo) {
             var xhr = responseInfo.xhr;
             var target = responseInfo.target;
+            var etc = responseInfo.etc;
 
             if (!triggerEvent(elt, 'htmx:beforeOnLoad', responseInfo)) return;
 
@@ -2120,110 +2804,162 @@ return (function () {
                 }
             }
 
-            var shouldSaveHistory = shouldPush(elt) || pushedUrl;
+            if (hasHeader(xhr,/HX-Retarget:/i)) {
+                responseInfo.target = getDocument().querySelector(xhr.getResponseHeader("HX-Retarget"));
+            }
 
-            if (xhr.status >= 200 && xhr.status < 400) {
+            /** @type {boolean} */
+            var shouldSaveHistory
+            if (pushedUrl == "false") {
+                shouldSaveHistory = false
+            } else {
+                shouldSaveHistory = shouldPush(elt) || pushedUrl;
+            }
+
+            // by default htmx only swaps on 200 return codes and does not swap
+            // on 204 'No Content'
+            // this can be ovverriden by responding to the htmx:beforeSwap event and
+            // overriding the detail.shouldSwap property
+            var shouldSwap = xhr.status >= 200 && xhr.status < 400 && xhr.status !== 204;
+            var serverResponse = xhr.response;
+            var isError = xhr.status >= 400;
+            var beforeSwapDetails = mergeObjects({shouldSwap: shouldSwap, serverResponse:serverResponse, isError:isError}, responseInfo);
+            if (!triggerEvent(target, 'htmx:beforeSwap', beforeSwapDetails)) return;
+
+            target = beforeSwapDetails.target; // allow re-targeting
+            serverResponse = beforeSwapDetails.serverResponse; // allow updating content
+            isError = beforeSwapDetails.isError; // allow updating error
+		
+            responseInfo.failed = isError; // Make failed property available to response events
+            responseInfo.successful = !isError; // Make successful property available to response events		
+
+            if (beforeSwapDetails.shouldSwap) {
                 if (xhr.status === 286) {
                     cancelPolling(elt);
                 }
-                // don't process 'No Content'
-                if (xhr.status !== 204) {
-                    if (!triggerEvent(target, 'htmx:beforeSwap', responseInfo)) return;
 
-                    var serverResponse = xhr.response;
-                    withExtensions(elt, function(extension){
-                        serverResponse = extension.transformResponse(serverResponse, xhr, elt);
-                    });
+                withExtensions(elt, function (extension) {
+                    serverResponse = extension.transformResponse(serverResponse, xhr, elt);
+                });
 
-                    // Save current page
-                    if (shouldSaveHistory) {
-                        saveHistory();
-                    }
+                // Save current page
+                if (shouldSaveHistory) {
+                    saveCurrentPageToHistory();
+                }
 
-                    var swapSpec = getSwapSpecification(elt);
+                var swapOverride = etc.swapOverride;
+                var swapSpec = getSwapSpecification(elt, swapOverride);
 
-                    target.classList.add(htmx.config.swappingClass);
-                    var doSwap = function () {
+                target.classList.add(htmx.config.swappingClass);
+                var doSwap = function () {
+                    try {
+
+                        var activeElt = document.activeElement;
+                        var selectionInfo = {};
                         try {
-
-                            var activeElt = document.activeElement;
-                            var selectionInfo = {
+                            selectionInfo = {
                                 elt: activeElt,
+                                // @ts-ignore
                                 start: activeElt ? activeElt.selectionStart : null,
+                                // @ts-ignore
                                 end: activeElt ? activeElt.selectionEnd : null
                             };
+                        } catch (e) {
+                            // safari issue - see https://github.com/microsoft/playwright/issues/5894
+                        }
 
-                            var settleInfo = makeSettleInfo(target);
-                            selectAndSwap(swapSpec.swapStyle, target, elt, serverResponse, settleInfo);
+                        var settleInfo = makeSettleInfo(target);
+                        selectAndSwap(swapSpec.swapStyle, target, elt, serverResponse, settleInfo);
 
-                            if (selectionInfo.elt &&
-                                !bodyContains(selectionInfo.elt) &&
-                                selectionInfo.elt.id) {
-                                var newActiveElt = document.getElementById(selectionInfo.elt.id);
-                                if (newActiveElt) {
-                                    if (selectionInfo.start && newActiveElt.setSelectionRange) {
-                                        newActiveElt.setSelectionRange(selectionInfo.start, selectionInfo.end);
-                                    }
-                                    newActiveElt.focus();
+                        if (selectionInfo.elt &&
+                            !bodyContains(selectionInfo.elt) &&
+                            selectionInfo.elt.id) {
+                            var newActiveElt = document.getElementById(selectionInfo.elt.id);
+                            var focusOptions = { preventScroll: swapSpec.focusScroll !== undefined ? !swapSpec.focusScroll : !htmx.config.defaultFocusScroll };
+                            if (newActiveElt) {
+                                // @ts-ignore
+                                if (selectionInfo.start && newActiveElt.setSelectionRange) {
+                                    // @ts-ignore
+                                    newActiveElt.setSelectionRange(selectionInfo.start, selectionInfo.end);
                                 }
+                                newActiveElt.focus(focusOptions);
                             }
+                        }
 
-                            target.classList.remove(htmx.config.swappingClass);
+                        target.classList.remove(htmx.config.swappingClass);
+                        forEach(settleInfo.elts, function (elt) {
+                            if (elt.classList) {
+                                elt.classList.add(htmx.config.settlingClass);
+                            }
+                            triggerEvent(elt, 'htmx:afterSwap', responseInfo);
+                        });
+                        if (responseInfo.pathInfo.anchor) {
+                            location.hash = responseInfo.pathInfo.anchor;
+                        }
+
+                        if (hasHeader(xhr, /HX-Trigger-After-Swap:/i)) {
+                            var finalElt = elt;
+                            if (!bodyContains(elt)) {
+                                finalElt = getDocument().body;
+                            }
+                            handleTrigger(xhr, "HX-Trigger-After-Swap", finalElt);
+                        }
+
+                        var doSettle = function () {
+                            forEach(settleInfo.tasks, function (task) {
+                                task.call();
+                            });
                             forEach(settleInfo.elts, function (elt) {
                                 if (elt.classList) {
-                                    elt.classList.add(htmx.config.settlingClass);
+                                    elt.classList.remove(htmx.config.settlingClass);
                                 }
-                                triggerEvent(elt, 'htmx:afterSwap', responseInfo);
+                                triggerEvent(elt, 'htmx:afterSettle', responseInfo);
                             });
-                            if (responseInfo.pathInfo.anchor) {
-                                location.hash = responseInfo.pathInfo.anchor;
+                            // push URL and save new page
+                            if (shouldSaveHistory) {
+                                var pathToPush = pushedUrl || getPushUrl(elt) || getResponseURL(xhr) || responseInfo.pathInfo.finalPath || responseInfo.pathInfo.path;
+                                pushUrlIntoHistory(pathToPush);
+                                triggerEvent(getDocument().body, 'htmx:pushedIntoHistory', {path: pathToPush});
                             }
 
-                            if (hasHeader(xhr, /HX-Trigger-After-Swap:/i)) {
-                                handleTrigger(xhr, "HX-Trigger-After-Swap", elt);
-                            }
-
-                            var doSettle = function(){
-                                forEach(settleInfo.tasks, function (task) {
-                                    task.call();
-                                });
-                                forEach(settleInfo.elts, function (elt) {
-                                    if (elt.classList) {
-                                        elt.classList.remove(htmx.config.settlingClass);
-                                    }
-                                    triggerEvent(elt, 'htmx:afterSettle', responseInfo);
-                                });
-                                // push URL and save new page
-                                if (shouldSaveHistory) {
-                                    var pathToPush = pushedUrl || getPushUrl(elt) || getResponseURL(xhr) || responseInfo.pathInfo.finalPath || responseInfo.pathInfo.path;
-                                    pushUrlIntoHistory(pathToPush);
-                                    triggerEvent(getDocument().body, 'htmx:pushedIntoHistory', {path:pathToPush});
-                                }
-                                updateScrollState(settleInfo.elts, swapSpec);
-
-                                if (hasHeader(xhr, /HX-Trigger-After-Settle:/i)) {
-                                    handleTrigger(xhr, "HX-Trigger-After-Settle", elt);
+                            if(settleInfo.title) {
+                                var titleElt = find("title");
+                                if(titleElt) {
+                                    titleElt.innerHTML = settleInfo.title;
+                                } else {
+                                    window.document.title = settleInfo.title;
                                 }
                             }
 
-                            if (swapSpec.settleDelay > 0) {
-                                setTimeout(doSettle, swapSpec.settleDelay)
-                            } else {
-                                doSettle();
+                            updateScrollState(settleInfo.elts, swapSpec);
+
+                            if (hasHeader(xhr, /HX-Trigger-After-Settle:/i)) {
+                                var finalElt = elt;
+                                if (!bodyContains(elt)) {
+                                    finalElt = getDocument().body;
+                                }
+                                handleTrigger(xhr, "HX-Trigger-After-Settle", finalElt);
                             }
-                        } catch (e) {
-                            triggerErrorEvent(elt, 'htmx:swapError', responseInfo);
-                            throw e;
                         }
-                    };
 
-                    if (swapSpec.swapDelay > 0) {
-                        setTimeout(doSwap, swapSpec.swapDelay)
-                    } else {
-                        doSwap();
+                        if (swapSpec.settleDelay > 0) {
+                            setTimeout(doSettle, swapSpec.settleDelay)
+                        } else {
+                            doSettle();
+                        }
+                    } catch (e) {
+                        triggerErrorEvent(elt, 'htmx:swapError', responseInfo);
+                        throw e;
                     }
+                };
+
+                if (swapSpec.swapDelay > 0) {
+                    setTimeout(doSwap, swapSpec.swapDelay)
+                } else {
+                    doSwap();
                 }
-            } else {
+            }
+            if (isError) {
                 triggerErrorEvent(elt, 'htmx:responseError', mergeObjects({error: "Response Status Error Code " + xhr.status + " from " + responseInfo.pathInfo.path}, responseInfo));
             }
         }
@@ -2231,9 +2967,17 @@ return (function () {
         //====================================================================
         // Extensions API
         //====================================================================
+
+        /** @type {Object<string, import("./htmx").HtmxExtension>} */
         var extensions = {};
+
+        /**
+         * extensionBase defines the default functions for all extensions.
+         * @returns {import("./htmx").HtmxExtension}
+         */
         function extensionBase() {
             return {
+                init: function(api) {return null;},
                 onEvent : function(name, evt) {return true;},
                 transformResponse : function(text, xhr, elt) {return text;},
                 isInlineSwap : function(swapStyle) {return false;},
@@ -2242,15 +2986,37 @@ return (function () {
             }
         }
 
+        /**
+         * defineExtension initializes the extension and adds it to the htmx registry
+         *
+         * @param {string} name
+         * @param {import("./htmx").HtmxExtension} extension
+         */
         function defineExtension(name, extension) {
+            if(extension.init) {
+                extension.init(internalAPI)
+            }
             extensions[name] = mergeObjects(extensionBase(), extension);
         }
 
+        /**
+         * removeExtension removes an extension from the htmx registry
+         *
+         * @param {string} name
+         */
         function removeExtension(name) {
             delete extensions[name];
         }
 
-        function getExtensions(elt, extensionsToReturn, extensionsToIgnore) {
+        /**
+         * getExtensions searches up the DOM tree to return all extensions that can be applied to a given element
+         *
+         * @param {HTMLElement} elt
+         * @param {import("./htmx").HtmxExtension[]=} extensionsToReturn
+         * @param {import("./htmx").HtmxExtension[]=} extensionsToIgnore
+         */
+         function getExtensions(elt, extensionsToReturn, extensionsToIgnore) {
+
             if (elt == undefined) {
                 return extensionsToReturn;
             }
@@ -2305,6 +3071,7 @@ return (function () {
         function getMetaConfig() {
             var element = getDocument().querySelector('meta[name="htmx-config"]');
             if (element) {
+                // @ts-ignore
                 return parseJSON(element.content);
             } else {
                 return null;
@@ -2324,9 +3091,25 @@ return (function () {
             insertIndicatorStyles();
             var body = getDocument().body;
             processNode(body);
+            var restoredElts = getDocument().querySelectorAll(
+                "[hx-trigger='restored'],[data-hx-trigger='restored']"
+            );
+            body.addEventListener("htmx:abort", function (evt) {
+                var target = evt.target;
+                var internalData = getInternalData(target);
+                if (internalData && internalData.xhr) {
+                    internalData.xhr.abort();
+                }
+            });
             window.onpopstate = function (event) {
                 if (event.state && event.state.htmx) {
                     restoreHistory();
+                    forEach(restoredElts, function(elt){
+                        triggerEvent(elt, 'htmx:restored', {
+                            'document': getDocument(),
+                            'triggerEvent': triggerEvent
+                        });
+                    });
                 }
             };
             setTimeout(function () {

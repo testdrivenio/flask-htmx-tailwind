@@ -20,12 +20,16 @@ Check out the [post](https://testdriven.io/blog/flask-htmx-tailwind/).
     (venv)$ pip install -r requirements.txt
     ```
 
-1. Install the Node dependencies:
+1. Configure Tailwind CSS:
 
     ```sh
-    $ npm install
-    # you may need to install PostCSS globally as well
-    # npm install --global postcss postcss-cli
+    (venv)$ tailwindcss
+    ```
+
+1. Scan the templates and generate CSS file:
+
+    ```sh
+    (venv)$ tailwindcss -i ./static/src/main.css -o ./static/dist/main.css --minify
     ```
 
 1. Run the app:
